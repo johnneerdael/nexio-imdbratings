@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestGetRatingWithEpisodesReturnsSeriesExpansionWithoutRating(t *testing.T) {
+func TestGetRatingWithEpisodesReturnsSeriesExpansionWithOptionalRating(t *testing.T) {
 	t.Parallel()
 
 	service := NewService(stubRepository{
@@ -15,7 +15,12 @@ func TestGetRatingWithEpisodesReturnsSeriesExpansionWithoutRating(t *testing.T) 
 				t.Fatalf("unexpected tconst %q", tconst)
 			}
 			return RatingWithEpisodes{
-				RequestTconst:        "tt-series",
+				RequestTconst: "tt-series",
+				Rating: &Rating{
+					Tconst:        "tt-series",
+					AverageRating: 9.3,
+					NumVotes:      4000,
+				},
 				EpisodesParentTconst: "tt-series",
 				Episodes: []EpisodeRating{
 					{
@@ -39,8 +44,8 @@ func TestGetRatingWithEpisodesReturnsSeriesExpansionWithoutRating(t *testing.T) 
 	if result.RequestTconst != "tt-series" {
 		t.Fatalf("unexpected request tconst %#v", result)
 	}
-	if result.Rating != nil {
-		t.Fatalf("expected rating to be omitted, got %#v", result.Rating)
+	if result.Rating == nil || result.Rating.Tconst != "tt-series" {
+		t.Fatalf("unexpected rating %#v", result.Rating)
 	}
 	if result.EpisodesParentTconst != "tt-series" {
 		t.Fatalf("unexpected parent %#v", result)

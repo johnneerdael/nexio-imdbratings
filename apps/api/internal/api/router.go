@@ -178,7 +178,18 @@ func wantsEpisodes(r *http.Request) bool {
 func decodeJSONBody(r *http.Request, target any) error {
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
-	return decoder.Decode(target)
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return imdb.ErrInvalidRequest
+		}
+		return err
+	}
+	return nil
 }
 
 func decodeIdentifierBody(r *http.Request) ([]string, error) {

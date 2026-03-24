@@ -67,15 +67,11 @@ func envBool(key string, fallback bool) bool {
 }
 
 func envDurationHours(key string, fallback int) time.Duration {
-	return time.Duration(envInt(key, fallback)) * time.Hour
+	return time.Duration(envPositiveInt(key, fallback)) * time.Hour
 }
 
 func envDurationMinutes(key string, fallback int) time.Duration {
-	return time.Duration(envInt(key, fallback)) * time.Minute
-}
-
-func envDurationSeconds(key string, fallback int) time.Duration {
-	return time.Duration(envInt(key, fallback)) * time.Second
+	return time.Duration(envPositiveInt(key, fallback)) * time.Minute
 }
 
 func envInt(key string, fallback int) int {
@@ -85,6 +81,14 @@ func envInt(key string, fallback int) int {
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func envPositiveInt(key string, fallback int) int {
+	value := envInt(key, fallback)
+	if value <= 0 {
 		return fallback
 	}
 	return value

@@ -17,6 +17,13 @@ type Store struct {
 	pool *pgxpool.Pool
 }
 
+type ratingEpisodesResolver struct {
+	getRating              func(context.Context, string) (imdb.Rating, error)
+	getEpisodeParentTconst func(context.Context, string) (string, bool, error)
+	hasEpisodesParent      func(context.Context, string) (bool, error)
+	listEpisodeRatings     func(context.Context, string) ([]imdb.EpisodeRating, error)
+}
+
 func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
@@ -162,50 +169,12 @@ func (s *Store) GetRating(ctx context.Context, tconst string) (imdb.Rating, erro
 }
 
 func (s *Store) GetRatingWithEpisodes(ctx context.Context, tconst string) (imdb.RatingWithEpisodes, error) {
-	result := imdb.RatingWithEpisodes{
-		RequestTconst: tconst,
-		Episodes:      []imdb.EpisodeRating{},
-	}
-
-	rating, err := s.GetRating(ctx, tconst)
-	switch {
-	case err == nil:
-		result.Rating = &rating
-	case !errors.Is(err, imdb.ErrNotFound):
-		return imdb.RatingWithEpisodes{}, err
-	}
-
-	parentTconst, isEpisode, err := s.getEpisodeParentTconst(ctx, tconst)
-	if err != nil {
-		return imdb.RatingWithEpisodes{}, err
-	}
-	if isEpisode {
-		result.EpisodesParentTconst = parentTconst
-		result.Episodes, err = s.listEpisodeRatings(ctx, parentTconst)
-		if err != nil {
-			return imdb.RatingWithEpisodes{}, err
-		}
-		return result, nil
-	}
-
-	hasEpisodes, err := s.hasEpisodesParent(ctx, tconst)
-	if err != nil {
-		return imdb.RatingWithEpisodes{}, err
-	}
-	if hasEpisodes {
-		result.EpisodesParentTconst = tconst
-		result.Episodes, err = s.listEpisodeRatings(ctx, tconst)
-		if err != nil {
-			return imdb.RatingWithEpisodes{}, err
-		}
-		return result, nil
-	}
-
-	if result.Rating != nil {
-		return result, nil
-	}
-
-	return imdb.RatingWithEpisodes{}, imdb.ErrNotFound
+	return resolveRatingWithEpisodes(ctx, tconst, ratingEpisodesResolver{
+		getRating:              s.GetRating,
+		getEpisodeParentTconst: s.getEpisodeParentTconst,
+		hasEpisodesParent:      s.hasEpisodesParent,
+		listEpisodeRatings:     s.listEpisodeRatings,
+	})
 }
 
 func (s *Store) getEpisodeParentTconst(ctx context.Context, tconst string) (string, bool, error) {
@@ -280,4 +249,57 @@ func (s *Store) listEpisodeRatings(ctx context.Context, parentTconst string) ([]
 		return []imdb.EpisodeRating{}, nil
 	}
 	return items, nil
+}
+
+func resolveRatingWithEpisodes(ctx context.Context, tconst string, resolver ratingEpisodesResolver) (imdb.RatingWithEpisodes, error) {
+	result := imdb.RatingWithEpisodes{
+		RequestTconst: tconst,
+		Episodes:      []imdb.EpisodeRating{},
+	}
+
+	rating, err := resolver.getRating(ctx, tconst)
+	switch {
+	case err == nil:
+		result.Rating = &rating
+	case !errors.Is(err, imdb.ErrNotFound):
+		return imdb.RatingWithEpisodes{}, err
+	}
+
+	parentTconst, isEpisode, err := resolver.getEpisodeParentTconst(ctx, tconst)
+	if err != nil {
+		return imdb.RatingWithEpisodes{}, err
+	}
+	if isEpisode {
+		result.EpisodesParentTconst = parentTconst
+		result.Episodes, err = resolver.listEpisodeRatings(ctx, parentTconst)
+		if err != nil {
+			return imdb.RatingWithEpisodes{}, err
+		}
+		if result.Episodes == nil {
+			result.Episodes = []imdb.EpisodeRating{}
+		}
+		return result, nil
+	}
+
+	hasEpisodes, err := resolver.hasEpisodesParent(ctx, tconst)
+	if err != nil {
+		return imdb.RatingWithEpisodes{}, err
+	}
+	if hasEpisodes {
+		result.EpisodesParentTconst = tconst
+		result.Episodes, err = resolver.listEpisodeRatings(ctx, tconst)
+		if err != nil {
+			return imdb.RatingWithEpisodes{}, err
+		}
+		if result.Episodes == nil {
+			result.Episodes = []imdb.EpisodeRating{}
+		}
+		return result, nil
+	}
+
+	if result.Rating != nil {
+		return result, nil
+	}
+
+	return imdb.RatingWithEpisodes{}, imdb.ErrNotFound
 }

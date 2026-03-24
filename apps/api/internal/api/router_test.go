@@ -148,7 +148,12 @@ func TestGetRatingWithEpisodesReturnsWrapper(t *testing.T) {
 				t.Fatalf("unexpected tconst %q", tconst)
 			}
 			return imdb.RatingWithEpisodes{
-				RequestTconst:        "tt0944947",
+				RequestTconst: "tt0944947",
+				Rating: &imdb.Rating{
+					Tconst:        "tt0944947",
+					AverageRating: 9.2,
+					NumVotes:      5000,
+				},
 				EpisodesParentTconst: "tt0944947",
 				Episodes: []imdb.EpisodeRating{
 					{
@@ -185,11 +190,35 @@ func TestGetRatingWithEpisodesReturnsWrapper(t *testing.T) {
 	if body.RequestTconst != "tt0944947" {
 		t.Fatalf("unexpected request tconst %#v", body)
 	}
+	if body.Rating == nil || body.Rating.Tconst != "tt0944947" {
+		t.Fatalf("unexpected rating %#v", body.Rating)
+	}
 	if body.EpisodesParentTconst != "tt0944947" {
 		t.Fatalf("unexpected parent %#v", body)
 	}
 	if len(body.Episodes) != 1 || body.Episodes[0].Tconst != "tt1480055" {
 		t.Fatalf("unexpected episodes %#v", body.Episodes)
+	}
+}
+
+func TestBulkGetRatingsRejectsTrailingJSONGarbage(t *testing.T) {
+	t.Parallel()
+
+	router := NewRouter(stubService{}, stubAuthenticator{
+		authenticate: func(context.Context, string) (*auth.Principal, error) {
+			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/ratings/bulk", bytes.NewBufferString(`{"identifiers":["tt-a"]}{"extra":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "valid-key")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
