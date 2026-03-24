@@ -22,7 +22,7 @@ This platform is intended for internal, non-commercial use against the public IM
 
 If you want containerized deployment instead, use the Docker Compose guide:
 
-- [`docs/docker-compose-deployment.md`](/Users/jneerdael/Scripts/imdb-scrape/docs/docker-compose-deployment.md)
+- [`docs/docker-compose-deployment.md`](docs/docker-compose-deployment.md)
 
 ## Architecture
 
@@ -361,7 +361,7 @@ Run this in order:
 4. Create the Postgres database.
 5. Clone the repo to `/opt/nexio-imdb/current`.
 6. Create `/etc/nexio-imdb.env`.
-7. Apply [`infra/postgres/migrations/0001_init.sql`](/Users/jneerdael/Scripts/imdb-scrape/infra/postgres/migrations/0001_init.sql).
+7. Apply [`infra/postgres/migrations/0001_init.sql`](infra/postgres/migrations/0001_init.sql).
 8. Run `npm ci`.
 9. Run `npm run build:docs`.
 10. Run `npm run build:web`.

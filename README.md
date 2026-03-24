@@ -33,7 +33,7 @@ The platform is intended for internal, non-commercial use against the public IMD
 
 ## Deployment
 
-- GitHub Pages docs site: built from [`docs-site/`](/Users/jneerdael/Scripts/imdb-scrape/docs-site) via [`docs-pages.yml`](/Users/jneerdael/Scripts/imdb-scrape/.github/workflows/docs-pages.yml) and published to the repository's default Pages URL
+- GitHub Pages docs site: built from [`docs-site/`](docs-site/) via the GitHub Pages workflow and published to the repository's default Pages URL
 - Production deployment guide: [`docs/deployment.md`](docs/deployment.md)
 - Docker Compose deployment guide: [`docs/docker-compose-deployment.md`](docs/docker-compose-deployment.md)
 - Proxy overlays:

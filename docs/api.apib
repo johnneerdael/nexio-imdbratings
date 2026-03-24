@@ -54,6 +54,9 @@ Set `episodes=true` to receive the wrapper form with `requestTconst`, optional `
 + Response 200 (application/json)
     + Attributes (Rating)
 
++ Response 200 (application/json)
+    + Attributes (RatingWithEpisodes)
+
 + Response 404 (application/json)
     + Attributes (ErrorEnvelope)
 
@@ -68,6 +71,9 @@ Set `episodes=true` to make each entry in `results` use the `RatingWithEpisodes`
 
 + Response 200 (application/json)
     + Attributes (BulkRatingsResponse)
+
++ Response 200 (application/json)
+    + Attributes (BulkRatingsWithEpisodesResponse)
 
 + Response 400 (application/json)
     + Attributes (ErrorEnvelope)

@@ -18,24 +18,24 @@ It is designed for a host serving `https://api.nexioapp.org`.
 
 Shared application stack:
 
-- [`docker-compose.deploy.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.deploy.yml)
+- [`docker-compose.deploy.yml`](docker-compose.deploy.yml)
 
 Proxy overlays:
 
-- [`docker-compose.caddy.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.caddy.yml)
-- [`docker-compose.caddy-net.override.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.caddy-net.override.yml)
-- [`docker-compose.nginx.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.nginx.yml)
-- [`docker-compose.traefik.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.traefik.yml)
+- [`docker-compose.caddy.yml`](docker-compose.caddy.yml)
+- [`docker-compose.caddy-net.override.yml`](docker-compose.caddy-net.override.yml)
+- [`docker-compose.nginx.yml`](docker-compose.nginx.yml)
+- [`docker-compose.traefik.yml`](docker-compose.traefik.yml)
 
 Proxy configs:
 
-- [`infra/caddy/Caddyfile`](/Users/jneerdael/Scripts/imdb-scrape/infra/caddy/Caddyfile)
-- [`infra/nginx/default.conf`](/Users/jneerdael/Scripts/imdb-scrape/infra/nginx/default.conf)
+- [`infra/caddy/Caddyfile`](infra/caddy/Caddyfile)
+- [`infra/nginx/default.conf`](infra/nginx/default.conf)
 
 Optional host-managed proxy override:
 
-- [`docker-compose.host-proxy.override.yml.example`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.host-proxy.override.yml.example)
-- [`docker-compose.host-ports.override.yml.example`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.host-ports.override.yml.example)
+- [`docker-compose.host-proxy.override.yml.example`](docker-compose.host-proxy.override.yml.example)
+- [`docker-compose.host-ports.override.yml.example`](docker-compose.host-ports.override.yml.example)
 
 ## How The Stack Is Split
 
@@ -220,7 +220,7 @@ docker network create caddy_net
 
 Use the dedicated override file:
 
-- [`docker-compose.caddy-net.override.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.caddy-net.override.yml)
+- [`docker-compose.caddy-net.override.yml`](docker-compose.caddy-net.override.yml)
 
 Start the app stack with it:
 
@@ -464,10 +464,10 @@ Internal container ports:
 
 Those values are baked into the proxy configs and service wiring:
 
-- [`docker-compose.deploy.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.deploy.yml)
-- [`infra/caddy/Caddyfile`](/Users/jneerdael/Scripts/imdb-scrape/infra/caddy/Caddyfile)
-- [`infra/nginx/default.conf`](/Users/jneerdael/Scripts/imdb-scrape/infra/nginx/default.conf)
-- [`docker-compose.traefik.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.traefik.yml)
+- [`docker-compose.deploy.yml`](docker-compose.deploy.yml)
+- [`infra/caddy/Caddyfile`](infra/caddy/Caddyfile)
+- [`infra/nginx/default.conf`](infra/nginx/default.conf)
+- [`docker-compose.traefik.yml`](docker-compose.traefik.yml)
 
 ### Option 1: Change Only The Host-Published Ports
 
@@ -481,7 +481,7 @@ Use it when:
 
 Example override:
 
-- [`docker-compose.host-ports.override.yml.example`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.host-ports.override.yml.example)
+- [`docker-compose.host-ports.override.yml.example`](docker-compose.host-ports.override.yml.example)
 
 ```yaml
 services:
@@ -520,7 +520,7 @@ Use this only if you really want the API container itself to listen on a differe
 
 Example: move the API from `8080` to `18080`.
 
-Update [`docker-compose.deploy.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.deploy.yml):
+Update [`docker-compose.deploy.yml`](docker-compose.deploy.yml):
 
 ```yaml
 api:
@@ -537,9 +537,9 @@ web:
 
 Then update every proxy target:
 
-- [`infra/caddy/Caddyfile`](/Users/jneerdael/Scripts/imdb-scrape/infra/caddy/Caddyfile): change `api:8080` to `api:18080`
-- [`infra/nginx/default.conf`](/Users/jneerdael/Scripts/imdb-scrape/infra/nginx/default.conf): change `http://api:8080` to `http://api:18080`
-- [`docker-compose.traefik.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.traefik.yml): change `traefik.http.services.nexio-api.loadbalancer.server.port` from `8080` to `18080`
+- [`infra/caddy/Caddyfile`](infra/caddy/Caddyfile): change `api:8080` to `api:18080`
+- [`infra/nginx/default.conf`](infra/nginx/default.conf): change `http://api:8080` to `http://api:18080`
+- [`docker-compose.traefik.yml`](docker-compose.traefik.yml): change `traefik.http.services.nexio-api.loadbalancer.server.port` from `8080` to `18080`
 
 If you also expose the API directly on the host, update the host mapping too:
 
@@ -556,7 +556,7 @@ Use this only if you really want the Nuxt container itself to listen on a differ
 
 Example: move the web app from `3000` to `3100`.
 
-Update [`docker-compose.deploy.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.deploy.yml):
+Update [`docker-compose.deploy.yml`](docker-compose.deploy.yml):
 
 ```yaml
 web:
@@ -567,9 +567,9 @@ web:
 
 Then update every proxy target:
 
-- [`infra/caddy/Caddyfile`](/Users/jneerdael/Scripts/imdb-scrape/infra/caddy/Caddyfile): change `web:3000` to `web:3100`
-- [`infra/nginx/default.conf`](/Users/jneerdael/Scripts/imdb-scrape/infra/nginx/default.conf): change `http://web:3000` to `http://web:3100`
-- [`docker-compose.traefik.yml`](/Users/jneerdael/Scripts/imdb-scrape/docker-compose.traefik.yml): change `traefik.http.services.nexio-web.loadbalancer.server.port` from `3000` to `3100`
+- [`infra/caddy/Caddyfile`](infra/caddy/Caddyfile): change `web:3000` to `web:3100`
+- [`infra/nginx/default.conf`](infra/nginx/default.conf): change `http://web:3000` to `http://web:3100`
+- [`docker-compose.traefik.yml`](docker-compose.traefik.yml): change `traefik.http.services.nexio-web.loadbalancer.server.port` from `3000` to `3100`
 
 If you also expose the web app directly on the host, update the host mapping too:
 
