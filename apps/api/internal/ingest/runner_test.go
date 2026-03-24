@@ -94,24 +94,38 @@ func TestCreateRawTableStatementUsesUnloggedTables(t *testing.T) {
 	}
 }
 
-func TestSelectSyncMode(t *testing.T) {
+func TestSelectSyncModeAlwaysUsesFullRefresh(t *testing.T) {
 	t.Parallel()
 
 	if got := selectSyncMode(false, false); got != syncModeFullRefresh {
 		t.Fatalf("expected initial sync to use full refresh, got %q", got)
 	}
-	if got := selectSyncMode(true, false); got != syncModeDelta {
-		t.Fatalf("expected recurring sync to use delta, got %q", got)
+	if got := selectSyncMode(true, false); got != syncModeFullRefresh {
+		t.Fatalf("expected recurring sync to use full refresh for atomic promotion, got %q", got)
 	}
 	if got := selectSyncMode(true, true); got != syncModeFullRefresh {
 		t.Fatalf("expected force flag to select full refresh, got %q", got)
 	}
 }
 
+func TestDatasetRequiresRefreshTreatsMissingValidatorsAsChanged(t *testing.T) {
+	t.Parallel()
+
+	if !datasetRequiresRefresh("", "", "", "") {
+		t.Fatal("expected empty validators to require refresh")
+	}
+	if !datasetRequiresRefresh("etag-a", "Mon, 01 Jan 2024 00:00:00 GMT", "", "") {
+		t.Fatal("expected missing remote validators to require refresh")
+	}
+	if !datasetRequiresRefresh("", "", "etag-b", "Mon, 01 Jan 2024 00:00:00 GMT") {
+		t.Fatal("expected missing stored validators to require refresh")
+	}
+}
+
 func TestIndexBuildPlanIsRatingsOnly(t *testing.T) {
 	t.Parallel()
 
-	base, deferred := buildIndexPlans(tableSet{
+	base := buildIndexPlans(tableSet{
 		TitleRatings:  "title_ratings_shadow_7",
 		TitleEpisodes: "title_episodes_shadow_7",
 	})
@@ -123,14 +137,6 @@ func TestIndexBuildPlanIsRatingsOnly(t *testing.T) {
 	expectedBase := []string{"index ratings votes", "index episodes parent"}
 	if !slices.Equal(baseNames, expectedBase) {
 		t.Fatalf("expected base indexes %v, got %v", expectedBase, baseNames)
-	}
-
-	deferredNames := make([]string, 0, len(deferred))
-	for _, item := range deferred {
-		deferredNames = append(deferredNames, item.name)
-	}
-	if len(deferredNames) != 0 {
-		t.Fatalf("expected no deferred indexes, got %v", deferredNames)
 	}
 }
 

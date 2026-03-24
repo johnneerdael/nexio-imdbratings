@@ -70,7 +70,6 @@ type syncMode string
 
 const (
 	syncModeFullRefresh syncMode = "full_refresh"
-	syncModeDelta       syncMode = "delta"
 )
 
 type indexStatement struct {
@@ -163,10 +162,7 @@ func rawTableName(snapshotID int64, spec datasetSpec) string {
 }
 
 func selectSyncMode(hasActiveSnapshot, forceFullRefresh bool) syncMode {
-	if forceFullRefresh || !hasActiveSnapshot {
-		return syncModeFullRefresh
-	}
-	return syncModeDelta
+	return syncModeFullRefresh
 }
 
 func (r *Runner) logf(format string, args ...any) {
@@ -295,11 +291,21 @@ func (r *Runner) changedDatasets(ctx context.Context, remote []remoteDataset) ([
 			changed = append(changed, item)
 			continue
 		}
-		if previous[0] != item.etag || previous[1] != item.lastModified {
+		if datasetRequiresRefresh(previous[0], previous[1], item.etag, item.lastModified) {
 			changed = append(changed, item)
 		}
 	}
 	return changed, nil
+}
+
+func datasetRequiresRefresh(previousETag, previousLastModified, currentETag, currentLastModified string) bool {
+	previousHasValidator := strings.TrimSpace(previousETag) != "" || strings.TrimSpace(previousLastModified) != ""
+	currentHasValidator := strings.TrimSpace(currentETag) != "" || strings.TrimSpace(currentLastModified) != ""
+
+	if !previousHasValidator || !currentHasValidator {
+		return true
+	}
+	return previousETag != currentETag || previousLastModified != currentLastModified
 }
 
 func (r *Runner) activeSnapshotState(ctx context.Context) (ActiveSnapshotState, error) {
@@ -360,10 +366,6 @@ func (r *Runner) createSnapshot(ctx context.Context, mode syncMode, baseline sna
 }
 
 func (r *Runner) importSnapshot(ctx context.Context, snapshotID int64, mode syncMode, changed []remoteDataset, remote []remoteDataset, baseline snapshotCounts, sourceUpdatedAt *time.Time, datasetVersion string) error {
-	if mode == syncModeDelta {
-		return r.importDeltaSnapshot(ctx, snapshotID, changed, remote, baseline, sourceUpdatedAt, datasetVersion)
-	}
-
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("begin import tx: %w", err)
@@ -417,9 +419,6 @@ func (r *Runner) importSnapshot(ctx context.Context, snapshotID int64, mode sync
 	r.logf("imdb sync snapshot %d committed to live tables", snapshotID)
 	if err := r.dropPreviousTables(ctx); err != nil {
 		r.logf("imdb sync snapshot %d previous table cleanup warning: %v", snapshotID, err)
-	}
-	if err := r.createDeferredIndexes(ctx); err != nil {
-		return err
 	}
 	if err := r.analyzeTables(ctx, liveTables().all()...); err != nil {
 		return err
@@ -602,8 +601,7 @@ func (r *Runner) createShadowTables(ctx context.Context, tx pgx.Tx, tables table
 }
 
 func (r *Runner) createSecondaryIndexes(ctx context.Context, tx pgx.Tx, tables tableSet) error {
-	base, _ := buildIndexPlans(tables)
-	for _, statement := range base {
+	for _, statement := range buildIndexPlans(tables) {
 		started := time.Now()
 		if _, err := tx.Exec(ctx, statement.statement); err != nil {
 			return fmt.Errorf("%s: %w", statement.name, err)
@@ -613,12 +611,11 @@ func (r *Runner) createSecondaryIndexes(ctx context.Context, tx pgx.Tx, tables t
 	return nil
 }
 
-func buildIndexPlans(tables tableSet) ([]indexStatement, []indexStatement) {
-	base := []indexStatement{
+func buildIndexPlans(tables tableSet) []indexStatement {
+	return []indexStatement{
 		{name: "index ratings votes", statement: fmt.Sprintf(`CREATE INDEX %s ON %s(num_votes DESC)`, tables.TitleRatings+"_num_votes_idx", tables.TitleRatings)},
 		{name: "index episodes parent", statement: fmt.Sprintf(`CREATE INDEX %s ON %s(parent_tconst, season_number, episode_number)`, tables.TitleEpisodes+"_parent_idx", tables.TitleEpisodes)},
 	}
-	return base, nil
 }
 
 func (r *Runner) promoteShadowTables(ctx context.Context, tx pgx.Tx, snapshotID int64, shadow tableSet, counts normalizeCounts, sourceUpdatedAt *time.Time, datasetVersion string, remote []remoteDataset) error {
@@ -681,18 +678,6 @@ func (r *Runner) dropPreviousTables(ctx context.Context) error {
 func (r *Runner) setLocalMaintenanceWorkMem(ctx context.Context, tx pgx.Tx) error {
 	if _, err := tx.Exec(ctx, `SELECT set_config('maintenance_work_mem', $1, true)`, r.maintenanceWorkMem); err != nil {
 		return fmt.Errorf("set local maintenance_work_mem: %w", err)
-	}
-	return nil
-}
-
-func (r *Runner) createDeferredIndexes(ctx context.Context) error {
-	_, deferred := buildIndexPlans(liveTables())
-	for _, statement := range deferred {
-		started := time.Now()
-		if _, err := r.pool.Exec(ctx, statement.statement); err != nil {
-			return fmt.Errorf("%s: %w", statement.name, err)
-		}
-		r.logf("imdb sync step complete: %s duration=%s", statement.name, time.Since(started).Round(time.Second))
 	}
 	return nil
 }
