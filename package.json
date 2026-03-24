@@ -15,7 +15,7 @@
     "build:web": "npm --workspace apps/web run build",
     "lint:docs": "node node_modules/aglio/bin/aglio.js -i docs/api.apib --theme-template triple --theme-variables slate --theme-style default --theme-style docs/aglio/theme.less -o /tmp/nexio-imdb-docs.html",
     "build:docs": "mkdir -p docs/public && node node_modules/aglio/bin/aglio.js -i docs/api.apib --theme-template triple --theme-variables slate --theme-style default --theme-style docs/aglio/theme.less -o docs/public/index.html",
-    "test:contract": "node -e \"const path=require('path'); const Dredd=require('dredd'); const cwd=process.cwd(); new Dredd({path:[path.join(cwd,'docs/api.apib')], endpoint:'http://127.0.0.1:3000', hookfiles:[], language:'nodejs', reporter:['cli'], output:[], header:[], method:[], only:[], color:true, loglevel:'warning', sorted:false, names:false, 'dry-run':true, custom:{cwd, apiUrl:'http://127.0.0.1:3000'}, apiDescriptions:[], http:{}}).run((err, stats) => { if (err) { console.error(err.message); process.exit(1); } console.log('complete: ' + stats.tests + ' total, ' + stats.errors + ' errors'); });\""
+    "test:contract": "node scripts/test-contract.cjs"
   },
   "devDependencies": {
     "aglio": "^2.3.0",

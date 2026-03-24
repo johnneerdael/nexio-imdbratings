@@ -1,0 +1,13 @@
+dry-run: null
+hookfiles: []
+language: nodejs
+server: cd apps/api && go run ./cmd/contractstub
+server-wait: 10
+init: false
+custom:
+  apiUrl: http://127.0.0.1:4010
+blueprint: docs/api.apib
+endpoint: http://127.0.0.1:4010
+reporter: cli
+header:
+  - X-API-Key: contract-test-key
