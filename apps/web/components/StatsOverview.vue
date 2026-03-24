@@ -8,16 +8,13 @@ defineProps<{
     imported_at: string
     completed_at: string | null
     is_active: boolean
-    title_count: number
-    name_count: number
     rating_count: number
+    episode_count: number
     status: string
   } | null
   stats: {
-    title_count: number
     rating_count: number
     episode_count: number
-    name_count: number
   }
 }>()
 </script>
@@ -66,10 +63,6 @@ defineProps<{
       <span class="badge">Footprint</span>
       <div class="mt-5 grid gap-4">
         <div class="glass rounded-[22px] p-4">
-          <div class="text-xs uppercase tracking-[0.14em] text-soft">Titles</div>
-          <div class="text-2xl font-black mt-2">{{ stats.title_count.toLocaleString() }}</div>
-        </div>
-        <div class="glass rounded-[22px] p-4">
           <div class="text-xs uppercase tracking-[0.14em] text-soft">Ratings</div>
           <div class="text-2xl font-black mt-2">{{ stats.rating_count.toLocaleString() }}</div>
         </div>
@@ -78,8 +71,9 @@ defineProps<{
           <div class="text-2xl font-black mt-2">{{ stats.episode_count.toLocaleString() }}</div>
         </div>
         <div class="glass rounded-[22px] p-4">
-          <div class="text-xs uppercase tracking-[0.14em] text-soft">Names</div>
-          <div class="text-2xl font-black mt-2">{{ stats.name_count.toLocaleString() }}</div>
+          <div class="text-xs uppercase tracking-[0.14em] text-soft">Coverage</div>
+          <div class="text-sm font-semibold mt-2 text-white/90">Ratings-only snapshot</div>
+          <div class="text-xs text-soft mt-1">Series episode lookups are powered by `title.episode.tsv.gz` linkage.</div>
         </div>
       </div>
     </article>

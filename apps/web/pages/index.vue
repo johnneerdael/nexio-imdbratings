@@ -14,16 +14,13 @@ type BootstrapPayload = {
     imported_at: string
     completed_at: string | null
     is_active: boolean
-    title_count: number
-    name_count: number
     rating_count: number
+    episode_count: number
     status: string
   } | null
   stats: {
-    title_count: number
     rating_count: number
     episode_count: number
-    name_count: number
   }
   apiKeys: Array<{
     id: string

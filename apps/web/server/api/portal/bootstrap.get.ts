@@ -18,13 +18,8 @@ export default defineEventHandler(async (event) => {
           completed_at,
           is_active,
           sync_mode,
-          title_count,
-          name_count,
           rating_count,
-          episode_count,
-          principal_count,
-          crew_member_count,
-          aka_count
+          episode_count
         from imdb_snapshots
         order by is_active desc, imported_at desc nulls last
         limit 1
@@ -63,29 +58,20 @@ export default defineEventHandler(async (event) => {
     ? {
         ...snapshot.rows[0],
         is_active: Boolean(snapshot.rows[0].is_active),
-        title_count: Number(snapshot.rows[0].title_count || 0),
-        name_count: Number(snapshot.rows[0].name_count || 0),
         rating_count: Number(snapshot.rows[0].rating_count || 0),
         episode_count: Number(snapshot.rows[0].episode_count || 0),
-        principal_count: Number(snapshot.rows[0].principal_count || 0),
-        crew_member_count: Number(snapshot.rows[0].crew_member_count || 0),
-        aka_count: Number(snapshot.rows[0].aka_count || 0),
         status: String(snapshot.rows[0].status || (snapshot.rows[0].is_active ? 'active' : 'staged'))
       }
     : null
 
   const statsRow = snapshot.rows[0]
     ? {
-        title_count: Number(snapshot.rows[0].title_count || 0),
         rating_count: Number(snapshot.rows[0].rating_count || 0),
-        episode_count: Number(snapshot.rows[0].episode_count || episodeEstimate.rows[0]?.episode_count || 0),
-        name_count: Number(snapshot.rows[0].name_count || 0)
+        episode_count: Number(snapshot.rows[0].episode_count || episodeEstimate.rows[0]?.episode_count || 0)
       }
     : {
-        title_count: 0,
         rating_count: 0,
-        episode_count: 0,
-        name_count: 0
+        episode_count: 0
       }
 
   return {
