@@ -10,30 +10,22 @@ func TestGetRatingWithEpisodesReturnsSeriesExpansionWithoutRating(t *testing.T) 
 	t.Parallel()
 
 	service := NewService(stubRepository{
-		getRating: func(context.Context, string) (Rating, error) {
-			return Rating{}, ErrNotFound
-		},
-		getEpisodeParentTconst: func(context.Context, string) (string, bool, error) {
-			return "", false, nil
-		},
-		hasEpisodesParent: func(_ context.Context, tconst string) (bool, error) {
+		getRatingWithEpisodes: func(_ context.Context, tconst string) (RatingWithEpisodes, error) {
 			if tconst != "tt-series" {
 				t.Fatalf("unexpected tconst %q", tconst)
 			}
-			return true, nil
-		},
-		listEpisodeRatings: func(_ context.Context, parentTconst string) ([]EpisodeRating, error) {
-			if parentTconst != "tt-series" {
-				t.Fatalf("unexpected parent %q", parentTconst)
-			}
-			return []EpisodeRating{
-				{
-					Tconst:        "tt-episode-1",
-					ParentTconst:  "tt-series",
-					SeasonNumber:  intPtr(1),
-					EpisodeNumber: intPtr(1),
-					AverageRating: 8.7,
-					NumVotes:      250,
+			return RatingWithEpisodes{
+				RequestTconst:        "tt-series",
+				EpisodesParentTconst: "tt-series",
+				Episodes: []EpisodeRating{
+					{
+						Tconst:        "tt-episode-1",
+						ParentTconst:  "tt-series",
+						SeasonNumber:  intPtr(1),
+						EpisodeNumber: intPtr(1),
+						AverageRating: 8.7,
+						NumVotes:      250,
+					},
 				},
 			}, nil
 		},
@@ -62,46 +54,35 @@ func TestGetRatingWithEpisodesResolvesEpisodeParentForSiblingLookup(t *testing.T
 	t.Parallel()
 
 	service := NewService(stubRepository{
-		getRating: func(_ context.Context, tconst string) (Rating, error) {
+		getRatingWithEpisodes: func(_ context.Context, tconst string) (RatingWithEpisodes, error) {
 			if tconst != "tt-episode-1" {
-				t.Fatalf("unexpected rating lookup %q", tconst)
+				t.Fatalf("unexpected lookup %q", tconst)
 			}
-			return Rating{
-				Tconst:        "tt-episode-1",
-				AverageRating: 8.9,
-				NumVotes:      900,
-			}, nil
-		},
-		getEpisodeParentTconst: func(_ context.Context, tconst string) (string, bool, error) {
-			if tconst != "tt-episode-1" {
-				t.Fatalf("unexpected episode lookup %q", tconst)
-			}
-			return "tt-series", true, nil
-		},
-		hasEpisodesParent: func(context.Context, string) (bool, error) {
-			t.Fatal("hasEpisodesParent should not be called for episode lookups")
-			return false, nil
-		},
-		listEpisodeRatings: func(_ context.Context, parentTconst string) ([]EpisodeRating, error) {
-			if parentTconst != "tt-series" {
-				t.Fatalf("unexpected parent %q", parentTconst)
-			}
-			return []EpisodeRating{
-				{
+			return RatingWithEpisodes{
+				RequestTconst:        "tt-episode-1",
+				EpisodesParentTconst: "tt-series",
+				Rating: &Rating{
 					Tconst:        "tt-episode-1",
-					ParentTconst:  "tt-series",
-					SeasonNumber:  intPtr(1),
-					EpisodeNumber: intPtr(1),
 					AverageRating: 8.9,
 					NumVotes:      900,
 				},
-				{
-					Tconst:        "tt-episode-2",
-					ParentTconst:  "tt-series",
-					SeasonNumber:  intPtr(1),
-					EpisodeNumber: intPtr(2),
-					AverageRating: 9.0,
-					NumVotes:      850,
+				Episodes: []EpisodeRating{
+					{
+						Tconst:        "tt-episode-1",
+						ParentTconst:  "tt-series",
+						SeasonNumber:  intPtr(1),
+						EpisodeNumber: intPtr(1),
+						AverageRating: 8.9,
+						NumVotes:      900,
+					},
+					{
+						Tconst:        "tt-episode-2",
+						ParentTconst:  "tt-series",
+						SeasonNumber:  intPtr(1),
+						EpisodeNumber: intPtr(2),
+						AverageRating: 9.0,
+						NumVotes:      850,
+					},
 				},
 			}, nil
 		},
@@ -130,18 +111,16 @@ func TestGetRatingWithEpisodesReturnsPlainRatingWhenNoEpisodeRelationExists(t *t
 	t.Parallel()
 
 	service := NewService(stubRepository{
-		getRating: func(context.Context, string) (Rating, error) {
-			return Rating{
-				Tconst:        "tt-movie",
-				AverageRating: 7.1,
-				NumVotes:      45,
+		getRatingWithEpisodes: func(context.Context, string) (RatingWithEpisodes, error) {
+			return RatingWithEpisodes{
+				RequestTconst: "tt-movie",
+				Rating: &Rating{
+					Tconst:        "tt-movie",
+					AverageRating: 7.1,
+					NumVotes:      45,
+				},
+				Episodes: []EpisodeRating{},
 			}, nil
-		},
-		getEpisodeParentTconst: func(context.Context, string) (string, bool, error) {
-			return "", false, nil
-		},
-		hasEpisodesParent: func(context.Context, string) (bool, error) {
-			return false, nil
 		},
 	})
 
@@ -168,14 +147,8 @@ func TestGetRatingWithEpisodesReturnsNotFoundWithoutRatingOrEpisodeRelation(t *t
 	t.Parallel()
 
 	service := NewService(stubRepository{
-		getRating: func(context.Context, string) (Rating, error) {
-			return Rating{}, ErrNotFound
-		},
-		getEpisodeParentTconst: func(context.Context, string) (string, bool, error) {
-			return "", false, nil
-		},
-		hasEpisodesParent: func(context.Context, string) (bool, error) {
-			return false, nil
+		getRatingWithEpisodes: func(context.Context, string) (RatingWithEpisodes, error) {
+			return RatingWithEpisodes{}, ErrNotFound
 		},
 	})
 
@@ -186,13 +159,11 @@ func TestGetRatingWithEpisodesReturnsNotFoundWithoutRatingOrEpisodeRelation(t *t
 }
 
 type stubRepository struct {
-	ping                   func(context.Context) error
-	listSnapshots          func(context.Context) ([]Snapshot, error)
-	getStats               func(context.Context) (Stats, error)
-	getRating              func(context.Context, string) (Rating, error)
-	getEpisodeParentTconst func(context.Context, string) (string, bool, error)
-	hasEpisodesParent      func(context.Context, string) (bool, error)
-	listEpisodeRatings     func(context.Context, string) ([]EpisodeRating, error)
+	ping                  func(context.Context) error
+	listSnapshots         func(context.Context) ([]Snapshot, error)
+	getStats              func(context.Context) (Stats, error)
+	getRating             func(context.Context, string) (Rating, error)
+	getRatingWithEpisodes func(context.Context, string) (RatingWithEpisodes, error)
 }
 
 func (s stubRepository) Ping(ctx context.Context) error {
@@ -223,25 +194,11 @@ func (s stubRepository) GetRating(ctx context.Context, tconst string) (Rating, e
 	return Rating{}, nil
 }
 
-func (s stubRepository) GetEpisodeParentTconst(ctx context.Context, tconst string) (string, bool, error) {
-	if s.getEpisodeParentTconst != nil {
-		return s.getEpisodeParentTconst(ctx, tconst)
+func (s stubRepository) GetRatingWithEpisodes(ctx context.Context, tconst string) (RatingWithEpisodes, error) {
+	if s.getRatingWithEpisodes != nil {
+		return s.getRatingWithEpisodes(ctx, tconst)
 	}
-	return "", false, nil
-}
-
-func (s stubRepository) HasEpisodesParent(ctx context.Context, tconst string) (bool, error) {
-	if s.hasEpisodesParent != nil {
-		return s.hasEpisodesParent(ctx, tconst)
-	}
-	return false, nil
-}
-
-func (s stubRepository) ListEpisodeRatings(ctx context.Context, parentTconst string) ([]EpisodeRating, error) {
-	if s.listEpisodeRatings != nil {
-		return s.listEpisodeRatings(ctx, parentTconst)
-	}
-	return nil, nil
+	return RatingWithEpisodes{}, nil
 }
 
 func intPtr(v int) *int { return &v }

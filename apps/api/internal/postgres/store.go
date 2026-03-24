@@ -161,7 +161,54 @@ func (s *Store) GetRating(ctx context.Context, tconst string) (imdb.Rating, erro
 	return rating, nil
 }
 
-func (s *Store) GetEpisodeParentTconst(ctx context.Context, tconst string) (string, bool, error) {
+func (s *Store) GetRatingWithEpisodes(ctx context.Context, tconst string) (imdb.RatingWithEpisodes, error) {
+	result := imdb.RatingWithEpisodes{
+		RequestTconst: tconst,
+		Episodes:      []imdb.EpisodeRating{},
+	}
+
+	rating, err := s.GetRating(ctx, tconst)
+	switch {
+	case err == nil:
+		result.Rating = &rating
+	case !errors.Is(err, imdb.ErrNotFound):
+		return imdb.RatingWithEpisodes{}, err
+	}
+
+	parentTconst, isEpisode, err := s.getEpisodeParentTconst(ctx, tconst)
+	if err != nil {
+		return imdb.RatingWithEpisodes{}, err
+	}
+	if isEpisode {
+		result.EpisodesParentTconst = parentTconst
+		result.Episodes, err = s.listEpisodeRatings(ctx, parentTconst)
+		if err != nil {
+			return imdb.RatingWithEpisodes{}, err
+		}
+		return result, nil
+	}
+
+	hasEpisodes, err := s.hasEpisodesParent(ctx, tconst)
+	if err != nil {
+		return imdb.RatingWithEpisodes{}, err
+	}
+	if hasEpisodes {
+		result.EpisodesParentTconst = tconst
+		result.Episodes, err = s.listEpisodeRatings(ctx, tconst)
+		if err != nil {
+			return imdb.RatingWithEpisodes{}, err
+		}
+		return result, nil
+	}
+
+	if result.Rating != nil {
+		return result, nil
+	}
+
+	return imdb.RatingWithEpisodes{}, imdb.ErrNotFound
+}
+
+func (s *Store) getEpisodeParentTconst(ctx context.Context, tconst string) (string, bool, error) {
 	var parentTconst string
 	err := s.pool.QueryRow(ctx, `
 		SELECT parent_tconst
@@ -177,7 +224,7 @@ func (s *Store) GetEpisodeParentTconst(ctx context.Context, tconst string) (stri
 	return parentTconst, true, nil
 }
 
-func (s *Store) HasEpisodesParent(ctx context.Context, tconst string) (bool, error) {
+func (s *Store) hasEpisodesParent(ctx context.Context, tconst string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx, `
 		SELECT EXISTS(
@@ -192,7 +239,7 @@ func (s *Store) HasEpisodesParent(ctx context.Context, tconst string) (bool, err
 	return exists, nil
 }
 
-func (s *Store) ListEpisodeRatings(ctx context.Context, parentTconst string) ([]imdb.EpisodeRating, error) {
+func (s *Store) listEpisodeRatings(ctx context.Context, parentTconst string) ([]imdb.EpisodeRating, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT
 			e.tconst,
@@ -228,6 +275,9 @@ func (s *Store) ListEpisodeRatings(ctx context.Context, parentTconst string) ([]
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate episode ratings: %w", err)
+	}
+	if items == nil {
+		return []imdb.EpisodeRating{}, nil
 	}
 	return items, nil
 }

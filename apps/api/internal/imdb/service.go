@@ -1,9 +1,6 @@
 package imdb
 
-import (
-	"context"
-	"errors"
-)
+import "context"
 
 type Service struct {
 	repo Repository
@@ -30,60 +27,5 @@ func (s *Service) GetRating(ctx context.Context, tconst string) (Rating, error) 
 }
 
 func (s *Service) GetRatingWithEpisodes(ctx context.Context, tconst string) (RatingWithEpisodes, error) {
-	result := RatingWithEpisodes{
-		RequestTconst: tconst,
-		Episodes:      []EpisodeRating{},
-	}
-
-	rating, err := s.repo.GetRating(ctx, tconst)
-	switch {
-	case err == nil:
-		result.Rating = &rating
-	case !errors.Is(err, ErrNotFound):
-		return RatingWithEpisodes{}, err
-	}
-
-	parentTconst, isEpisode, err := s.repo.GetEpisodeParentTconst(ctx, tconst)
-	if err != nil {
-		return RatingWithEpisodes{}, err
-	}
-
-	if isEpisode {
-		result.EpisodesParentTconst = parentTconst
-		result.Episodes, err = s.listEpisodeRatings(ctx, parentTconst)
-		if err != nil {
-			return RatingWithEpisodes{}, err
-		}
-		return result, nil
-	}
-
-	hasEpisodesParent, err := s.repo.HasEpisodesParent(ctx, tconst)
-	if err != nil {
-		return RatingWithEpisodes{}, err
-	}
-	if hasEpisodesParent {
-		result.EpisodesParentTconst = tconst
-		result.Episodes, err = s.listEpisodeRatings(ctx, tconst)
-		if err != nil {
-			return RatingWithEpisodes{}, err
-		}
-		return result, nil
-	}
-
-	if result.Rating != nil {
-		return result, nil
-	}
-
-	return RatingWithEpisodes{}, ErrNotFound
-}
-
-func (s *Service) listEpisodeRatings(ctx context.Context, parentTconst string) ([]EpisodeRating, error) {
-	items, err := s.repo.ListEpisodeRatings(ctx, parentTconst)
-	if err != nil {
-		return nil, err
-	}
-	if items == nil {
-		return []EpisodeRating{}, nil
-	}
-	return items, nil
+	return s.repo.GetRatingWithEpisodes(ctx, tconst)
 }

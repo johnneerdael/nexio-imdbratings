@@ -24,9 +24,7 @@ type Repository interface {
 	ListSnapshots(ctx context.Context) ([]Snapshot, error)
 	GetStats(ctx context.Context) (Stats, error)
 	GetRating(ctx context.Context, tconst string) (Rating, error)
-	GetEpisodeParentTconst(ctx context.Context, tconst string) (string, bool, error)
-	HasEpisodesParent(ctx context.Context, tconst string) (bool, error)
-	ListEpisodeRatings(ctx context.Context, parentTconst string) ([]EpisodeRating, error)
+	GetRatingWithEpisodes(ctx context.Context, tconst string) (RatingWithEpisodes, error)
 }
 
 type Snapshot struct {
