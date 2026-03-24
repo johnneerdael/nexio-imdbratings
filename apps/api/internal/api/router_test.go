@@ -15,7 +15,7 @@ import (
 func TestHealthzDoesNotRequireAuth(t *testing.T) {
 	t.Parallel()
 
-	router := NewRouter(stubService{}, stubAuthenticator{})
+	router := NewRouter(stubService{}, stubAuthenticator{}, nil)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 
@@ -39,7 +39,7 @@ func TestReadyzDoesNotRequireAuth(t *testing.T) {
 
 	router := NewRouter(stubService{
 		ready: func(context.Context) error { return nil },
-	}, stubAuthenticator{})
+	}, stubAuthenticator{}, nil)
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	rec := httptest.NewRecorder()
 
@@ -53,7 +53,7 @@ func TestReadyzDoesNotRequireAuth(t *testing.T) {
 func TestV1RoutesRequireAPIKey(t *testing.T) {
 	t.Parallel()
 
-	router := NewRouter(stubService{}, stubAuthenticator{})
+	router := NewRouter(stubService{}, stubAuthenticator{}, nil)
 	req := httptest.NewRequest(http.MethodGet, "/v1/meta/stats", nil)
 	rec := httptest.NewRecorder()
 
@@ -79,7 +79,7 @@ func TestGetStatsReturnsRatingsOnlyPayload(t *testing.T) {
 		authenticate: func(context.Context, string) (*auth.Principal, error) {
 			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
 		},
-	})
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/meta/stats", nil)
 	req.Header.Set("X-API-Key", "valid-key")
@@ -118,7 +118,7 @@ func TestGetRatingSupportsXAPIKey(t *testing.T) {
 			}
 			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
 		},
-	})
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/ratings/tt1375666", nil)
 	req.Header.Set("X-API-Key", "valid-key")
@@ -171,7 +171,7 @@ func TestGetRatingWithEpisodesReturnsWrapper(t *testing.T) {
 		authenticate: func(context.Context, string) (*auth.Principal, error) {
 			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
 		},
-	})
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/ratings/tt0944947?episodes=true", nil)
 	req.Header.Set("Authorization", "Bearer valid-key")
@@ -208,7 +208,7 @@ func TestBulkGetRatingsRejectsTrailingJSONGarbage(t *testing.T) {
 		authenticate: func(context.Context, string) (*auth.Principal, error) {
 			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
 		},
-	})
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/ratings/bulk", bytes.NewBufferString(`{"identifiers":["tt-a"]}{"extra":true}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -240,7 +240,7 @@ func TestBulkGetRatingsReturnsResultsAndMissing(t *testing.T) {
 		authenticate: func(context.Context, string) (*auth.Principal, error) {
 			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
 		},
-	})
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/ratings/bulk", bytes.NewBufferString(`{"identifiers":["tt-a","tt-missing","tt-b"]}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -290,7 +290,7 @@ func TestBulkGetRatingsWithEpisodesReturnsWrappersAndMissing(t *testing.T) {
 		authenticate: func(context.Context, string) (*auth.Principal, error) {
 			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
 		},
-	})
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/ratings/bulk?episodes=true", bytes.NewBufferString(`{"identifiers":["tt-a","tt-missing"]}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -334,7 +334,7 @@ func TestBulkGetRatingsRejectsMoreThan250Identifiers(t *testing.T) {
 		authenticate: func(context.Context, string) (*auth.Principal, error) {
 			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
 		},
-	})
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/ratings/bulk", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
@@ -355,7 +355,7 @@ func TestRemovedIMDbEndpointsReturn404(t *testing.T) {
 		authenticate: func(context.Context, string) (*auth.Principal, error) {
 			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
 		},
-	})
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/titles/tt1375666", nil)
 	req.Header.Set("X-API-Key", "valid-key")

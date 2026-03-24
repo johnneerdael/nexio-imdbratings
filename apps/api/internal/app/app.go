@@ -28,7 +28,17 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 
 	store := postgres.NewStore(pool)
-	router := api.NewRouter(imdb.NewService(store), auth.NewService(store, cfg.APIKeyPepper))
+	router := api.NewRouter(
+		imdb.NewService(store),
+		auth.NewService(store, cfg.APIKeyPepper),
+		api.NewRequestRateLimiter(api.RateLimitConfig{
+			Enabled:         cfg.RateLimitEnabled,
+			TokensPerSecond: cfg.RateLimitTokensPerSecond,
+			Burst:           cfg.RateLimitBurst,
+			EpisodesCost:    cfg.RateLimitEpisodesCost,
+			BulkDivisor:     cfg.RateLimitBulkDivisor,
+		}),
+	)
 
 	return &App{
 		pool: pool,

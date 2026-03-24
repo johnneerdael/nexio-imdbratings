@@ -18,6 +18,7 @@ import (
 type Handler struct {
 	service imdb.QueryService
 	auth    auth.Authenticator
+	limiter RateLimiter
 }
 
 type errorEnvelope struct {
@@ -29,10 +30,11 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
-func NewRouter(service imdb.QueryService, authenticator auth.Authenticator) http.Handler {
+func NewRouter(service imdb.QueryService, authenticator auth.Authenticator, limiter RateLimiter) http.Handler {
 	handler := Handler{
 		service: service,
 		auth:    authenticator,
+		limiter: limiter,
 	}
 
 	router := chi.NewRouter()
@@ -162,9 +164,21 @@ func (h Handler) requireAPIKey(next http.Handler) http.Handler {
 			return
 		}
 
-		if _, err := h.auth.Authenticate(r.Context(), apiKey); err != nil {
+		principal, err := h.auth.Authenticate(r.Context(), apiKey)
+		if err != nil {
 			writeError(w, http.StatusUnauthorized, "invalid_api_key", "api key invalid")
 			return
+		}
+		if h.limiter != nil {
+			decision, err := h.limiter.Allow(principal, r)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+				return
+			}
+			if !decision.Allowed {
+				writeRateLimited(w, decision)
+				return
+			}
 		}
 
 		next.ServeHTTP(w, r)

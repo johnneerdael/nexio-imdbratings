@@ -8,30 +8,40 @@ import (
 )
 
 type Config struct {
-	Address                string
-	DatabaseURL            string
-	APIKeyPepper           string
-	IMDbDatasetBaseURL     string
-	IMDbSyncInterval       time.Duration
-	IMDbRunOnStartup       bool
-	IMDbForceFullRefresh   bool
-	IMDbDeltaBatchSize     int
-	IMDbMaintenanceWorkMem string
-	HTTPTimeout            time.Duration
+	Address                  string
+	DatabaseURL              string
+	APIKeyPepper             string
+	IMDbDatasetBaseURL       string
+	IMDbSyncInterval         time.Duration
+	IMDbRunOnStartup         bool
+	IMDbForceFullRefresh     bool
+	IMDbDeltaBatchSize       int
+	IMDbMaintenanceWorkMem   string
+	HTTPTimeout              time.Duration
+	RateLimitEnabled         bool
+	RateLimitTokensPerSecond int
+	RateLimitBurst           int
+	RateLimitEpisodesCost    int
+	RateLimitBulkDivisor     int
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		Address:                envOrDefault("API_ADDRESS", ":8080"),
-		DatabaseURL:            os.Getenv("DATABASE_URL"),
-		APIKeyPepper:           os.Getenv("API_KEY_PEPPER"),
-		IMDbDatasetBaseURL:     envOrDefault("IMDB_DATASET_BASE_URL", "https://datasets.imdbws.com"),
-		IMDbSyncInterval:       envDurationHours("IMDB_SYNC_INTERVAL_HOURS", 12),
-		IMDbRunOnStartup:       envBool("IMDB_RUN_ON_STARTUP", true),
-		IMDbForceFullRefresh:   envBool("IMDB_FORCE_FULL_REFRESH", false),
-		IMDbDeltaBatchSize:     envInt("IMDB_DELTA_BATCH_SIZE", 50000),
-		IMDbMaintenanceWorkMem: envOrDefault("IMDB_MAINTENANCE_WORK_MEM", "1GB"),
-		HTTPTimeout:            envDurationMinutes("HTTP_TIMEOUT_MINUTES", 30),
+		Address:                  envOrDefault("API_ADDRESS", ":8080"),
+		DatabaseURL:              os.Getenv("DATABASE_URL"),
+		APIKeyPepper:             os.Getenv("API_KEY_PEPPER"),
+		IMDbDatasetBaseURL:       envOrDefault("IMDB_DATASET_BASE_URL", "https://datasets.imdbws.com"),
+		IMDbSyncInterval:         envDurationHours("IMDB_SYNC_INTERVAL_HOURS", 12),
+		IMDbRunOnStartup:         envBool("IMDB_RUN_ON_STARTUP", true),
+		IMDbForceFullRefresh:     envBool("IMDB_FORCE_FULL_REFRESH", false),
+		IMDbDeltaBatchSize:       envInt("IMDB_DELTA_BATCH_SIZE", 50000),
+		IMDbMaintenanceWorkMem:   envOrDefault("IMDB_MAINTENANCE_WORK_MEM", "1GB"),
+		HTTPTimeout:              envDurationMinutes("HTTP_TIMEOUT_MINUTES", 30),
+		RateLimitEnabled:         envBool("RATE_LIMIT_ENABLED", true),
+		RateLimitTokensPerSecond: envPositiveInt("RATE_LIMIT_TOKENS_PER_SECOND", 10),
+		RateLimitBurst:           envPositiveInt("RATE_LIMIT_BURST", 40),
+		RateLimitEpisodesCost:    envPositiveInt("RATE_LIMIT_EPISODES_COST", 8),
+		RateLimitBulkDivisor:     envPositiveInt("RATE_LIMIT_BULK_DIVISOR", 25),
 	}
 
 	if cfg.DatabaseURL == "" {

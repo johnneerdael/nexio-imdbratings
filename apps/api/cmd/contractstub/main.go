@@ -28,7 +28,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: api.NewRouter(contractService{}, contractAuthenticator{}),
+		Handler: api.NewRouter(contractService{}, contractAuthenticator{}, nil),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
