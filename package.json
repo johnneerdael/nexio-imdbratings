@@ -1,0 +1,25 @@
+{
+  "name": "nexio-imdb-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:api": "cd apps/api && go run ./cmd/api",
+    "dev:worker": "cd apps/api && go run ./cmd/worker",
+    "dev:web": "npm --workspace apps/web run dev",
+    "docs:dev": "node node_modules/vitepress/bin/vitepress.js dev docs-site",
+    "docs:build": "node node_modules/vitepress/bin/vitepress.js build docs-site",
+    "test:api": "cd apps/api && go test ./...",
+    "build:web": "npm --workspace apps/web run build",
+    "lint:docs": "node node_modules/aglio/bin/aglio.js -i docs/api.apib --theme-template triple --theme-variables slate --theme-style default --theme-style docs/aglio/theme.less -o /tmp/nexio-imdb-docs.html",
+    "build:docs": "mkdir -p docs/public && node node_modules/aglio/bin/aglio.js -i docs/api.apib --theme-template triple --theme-variables slate --theme-style default --theme-style docs/aglio/theme.less -o docs/public/index.html",
+    "test:contract": "node node_modules/dredd/bin/dredd"
+  },
+  "devDependencies": {
+    "aglio": "^2.3.0",
+    "dredd": "^14.1.0",
+    "vitepress": "^1.6.4"
+  }
+}

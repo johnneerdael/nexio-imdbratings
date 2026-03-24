@@ -1,0 +1,43 @@
+# Nexio IMDb Internal API Platform
+
+Internal IMDb ratings-only ingestion and query platform for `api.nexioapp.org`.
+
+The platform is intended for internal, non-commercial use against the public IMDb dataset snapshots.
+
+## Monorepo Layout
+
+- `apps/api`: Go API, scheduled IMDb import worker, dataset ingestion pipeline, and migrations
+- `apps/web`: Nuxt 4 portal with Google OIDC auth and internal docs
+- `docs`: API Blueprint contract source and generated API Blueprint HTML
+- `docs-site`: VitePress public docs site for the platform
+- `infra/postgres`: local Postgres bootstrap assets
+
+## Local Development
+
+1. Copy `.env.example` to your local environment file and fill in Google OAuth and secret values.
+2. Start Postgres with `docker compose up -d postgres`.
+3. Apply [`infra/postgres/migrations/0001_init.sql`](infra/postgres/migrations/0001_init.sql) to the database.
+4. Run `npm run dev:api` for the Go query API.
+5. Run `npm run dev:worker` for scheduled IMDb imports.
+6. Run `npm run dev:web` for the Nuxt portal.
+7. Run `npm run docs:dev` for the VitePress docs site.
+8. Run `npm run build:docs` to render the API Blueprint HTML docs consumed by the portal.
+
+## Runtime Notes
+
+- The worker checks IMDb dataset metadata and imports only when upstream `ETag` or `Last-Modified` values change.
+- Imports stream gzip TSV snapshots directly into temporary Postgres staging tables, then normalize inside a transaction before promoting the snapshot.
+- The API is ratings-only: `/v1/meta/snapshots`, `/v1/meta/stats`, `/v1/ratings/{tconst}`, and `/v1/ratings/bulk`.
+- Append `episodes=true` to the ratings endpoints when you need the wrapper response with episode context.
+- The portal uses direct Google OIDC in Nuxt and stores users, sessions, and API keys in Postgres.
+
+## Deployment
+
+- GitHub Pages docs site: built from [`docs-site/`](/Users/jneerdael/Scripts/imdb-scrape/docs-site) via [`docs-pages.yml`](/Users/jneerdael/Scripts/imdb-scrape/.github/workflows/docs-pages.yml) and published to the repository's default Pages URL
+- Production deployment guide: [`docs/deployment.md`](docs/deployment.md)
+- Docker Compose deployment guide: [`docs/docker-compose-deployment.md`](docs/docker-compose-deployment.md)
+- Proxy overlays:
+  - [`docker-compose.caddy.yml`](docker-compose.caddy.yml)
+  - [`docker-compose.caddy-net.override.yml`](docker-compose.caddy-net.override.yml)
+  - [`docker-compose.nginx.yml`](docker-compose.nginx.yml)
+  - [`docker-compose.traefik.yml`](docker-compose.traefik.yml)

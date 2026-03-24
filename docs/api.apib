@@ -1,0 +1,144 @@
+FORMAT: 1A
+
+# Nexio IMDb Ratings API
+
+Internal, non-commercial ratings-only IMDb dataset API for Nexio.
+
+Every `/v1/*` route requires an API key via `X-API-Key` or `Authorization: Bearer`.
+
+# Group Platform
+
+## Health Check [/healthz]
+
+### Get Health [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (HealthResponse)
+
+## Readiness Check [/readyz]
+
+### Get Readiness [GET]
+
++ Response 200 (application/json)
+    + Attributes (ReadinessResponse)
+
++ Response 503 (application/json)
+    + Attributes (ErrorEnvelope)
+
+## Snapshot Metadata [/v1/meta/snapshots]
+
+### List Snapshots [GET]
+
++ Response 200 (application/json)
+    + Attributes (SnapshotsResponse)
+
+## Dataset Stats [/v1/meta/stats]
+
+### Get Stats [GET]
+
++ Response 200 (application/json)
+    + Attributes (Stats)
+
+# Group Ratings
+
+## Title Rating [/v1/ratings/{tconst}]
+
++ Parameters
+    + tconst: `tt32459853` (string, required)
+
+### Get Rating [GET]
+
+Set `episodes=true` to receive the wrapper form with `requestTconst`, optional `rating`, optional `episodesParentTconst`, and `episodes`.
+
++ Response 200 (application/json)
+    + Attributes (Rating)
+
++ Response 404 (application/json)
+    + Attributes (ErrorEnvelope)
+
+## Ratings Bulk [/v1/ratings/bulk]
+
+### Bulk Get Ratings [POST]
+
+Set `episodes=true` to make each entry in `results` use the `RatingWithEpisodes` wrapper. `missing` still records identifiers that were not found.
+
++ Request (application/json)
+    + Attributes (BulkRatingsRequest)
+
++ Response 200 (application/json)
+    + Attributes (BulkRatingsResponse)
+
++ Response 400 (application/json)
+    + Attributes (ErrorEnvelope)
+
+# Data Structures
+
+## HealthResponse (object)
++ status: ok (string, required)
+
+## ReadinessResponse (object)
++ status: ready (string, required)
+
+## ErrorEnvelope (object)
++ error (ErrorDetails, required)
+
+## ErrorDetails (object)
++ code: invalid_request (string, required)
++ message: request parameters are invalid (string, required)
+
+## SnapshotsResponse (object)
++ items (array[Snapshot], required)
+
+## Stats (object)
++ ratings: 1600000 (number, required)
++ episodes: 6200000 (number, required)
++ snapshots: 12 (number, required)
+
+## Snapshot (object)
++ id: 1 (number, required)
++ dataset: title.ratings.tsv.gz (string, required)
++ status: active (string, required)
++ syncMode: delta (string, optional)
++ datasetVersion: 2026-03-22 (string, optional)
++ importedAt: 2026-03-22T18:02:11Z (string, required)
++ sourceUpdatedAt: 2026-03-22T12:34:20Z (string, optional)
++ sourceETag: W/"etag-value" (string, optional)
++ isActive: true (boolean, required)
++ ratingCount: 1600000 (number, required)
++ episodeCount: 6200000 (number, required)
++ notes: Imported successfully. (string, optional)
++ sourceUrl: https://datasets.imdbws.com/title.ratings.tsv.gz (string, optional)
++ completedAt: 2026-03-22T18:05:00Z (string, optional)
+
+## Rating (object)
++ tconst: tt32459853 (string, required)
++ averageRating: 7.8 (number, required)
++ numVotes: 1500 (number, required)
+
+## EpisodeRating (object)
++ tconst: tt32459853 (string, required)
++ parentTconst: tt27444205 (string, required)
++ seasonNumber: 1 (number, optional)
++ episodeNumber: 2 (number, optional)
++ averageRating: 7.8 (number, required)
++ numVotes: 1500 (number, required)
+
+## RatingWithEpisodes (object)
++ requestTconst: tt27444205 (string, required)
++ rating (Rating, optional)
++ episodesParentTconst: tt27444205 (string, optional)
++ episodes (array[EpisodeRating], required)
+
+## BulkRatingsRequest (object)
++ identifiers (array[string], required)
+    + tt32459853
+    + tt0944947
+
+## BulkRatingsResponse (object)
++ results (array[Rating], required)
++ missing (array[string], required)
+
+## BulkRatingsWithEpisodesResponse (object)
++ results (array[RatingWithEpisodes], required)
++ missing (array[string], required)
