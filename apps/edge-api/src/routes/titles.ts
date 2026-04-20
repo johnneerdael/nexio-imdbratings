@@ -31,7 +31,7 @@ export async function searchTitlesQuery(
   }>>`
     SELECT tconst, title_type, primary_title, start_year
     FROM title_basics
-    WHERE title_type = ANY(${types})
+    WHERE title_type = ANY(${types}::text[])
       AND primary_title ILIKE ${pattern}
     ORDER BY
       CASE WHEN lower(primary_title) = lower(${q}) THEN 0
