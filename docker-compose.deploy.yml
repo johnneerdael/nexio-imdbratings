@@ -33,8 +33,10 @@ services:
         until pg_isready -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"; do
           sleep 2;
         done &&
-        psql -v ON_ERROR_STOP=1 -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
-        -f /migrations/0001_init.sql
+        for f in $$(ls /migrations/*.sql | sort); do
+          echo "applying $$f";
+          psql -v ON_ERROR_STOP=1 -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f "$$f" || exit 1;
+        done
 
   api:
     build:
