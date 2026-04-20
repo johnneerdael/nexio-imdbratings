@@ -1,0 +1,31 @@
+name = "nexio-edge-api"
+main = "src/index.ts"
+compatibility_date = "2025-04-20"
+compatibility_flags = ["nodejs_compat"]
+
+# Hyperdrive binding — replace the id with your own `wrangler hyperdrive list` output
+# if you redeploy to a different account. The current value matches the working
+# test binding from imdb-hyperdrive-test.
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "c04cfc6773894572a401568937632373"
+
+[[durable_objects.bindings]]
+name = "API_KEY_SESSION"
+class_name = "ApiKeySession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ApiKeySession"]
+
+[observability]
+enabled = true
+
+[vars]
+RATE_LIMIT_ENABLED = "true"
+RATE_LIMIT_TOKENS_PER_SECOND = "10"
+RATE_LIMIT_BURST = "40"
+RATE_LIMIT_EPISODES_COST = "8"
+RATE_LIMIT_BULK_DIVISOR = "25"
+
+# Secrets set via: wrangler secret put API_KEY_PEPPER
