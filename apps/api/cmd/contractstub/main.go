@@ -100,6 +100,35 @@ func (contractService) GetRating(_ context.Context, tconst string) (imdb.Rating,
 	return rating, nil
 }
 
+func (contractService) SearchTitles(_ context.Context, query imdb.TitleSearchQuery) (imdb.TitleSearchResponse, error) {
+	year := 1999
+	results := []imdb.TitleSearchResult{
+		{
+			Tconst:       "tt0133093",
+			TitleType:    "movie",
+			PrimaryTitle: "The Matrix",
+			StartYear:    &year,
+		},
+	}
+	filtered := results[:0]
+	typeSet := make(map[string]bool, len(query.Types))
+	for _, t := range query.Types {
+		typeSet[t] = true
+	}
+	for _, r := range results {
+		if typeSet[r.TitleType] {
+			filtered = append(filtered, r)
+		}
+	}
+	if len(filtered) > query.Limit {
+		filtered = filtered[:query.Limit]
+	}
+	return imdb.TitleSearchResponse{
+		Results: filtered,
+		Meta:    imdb.TitleSearchMeta{SnapshotID: 1, Count: len(filtered)},
+	}, nil
+}
+
 func (contractService) GetRatingWithEpisodes(_ context.Context, tconst string) (imdb.RatingWithEpisodes, error) {
 	rating, hasRating := ratingFixtures[tconst]
 	parentTconst, isEpisode := episodeParentByTconst[tconst]

@@ -1,6 +1,6 @@
 # Nexio IMDb Internal API Platform
 
-Internal IMDb ratings-only ingestion and query platform for `api.nexioapp.org`.
+Internal IMDb ratings and title search ingestion and query platform for `api.nexioapp.org`.
 
 The platform is intended for internal, non-commercial use against the public IMDb dataset snapshots.
 
@@ -27,7 +27,7 @@ The platform is intended for internal, non-commercial use against the public IMD
 
 - The worker checks IMDb dataset metadata and imports only when upstream `ETag` or `Last-Modified` values change.
 - Imports stream gzip TSV snapshots directly into temporary Postgres staging tables, then normalize inside a transaction before promoting the snapshot.
-- The API is ratings-only: `/v1/meta/snapshots`, `/v1/meta/stats`, `/v1/ratings/{tconst}`, and `/v1/ratings/bulk`.
+- The API provides ratings and title search: `/v1/meta/snapshots`, `/v1/meta/stats`, `/v1/ratings/{tconst}`, `/v1/ratings/bulk`, `/v1/titles/search`, and `/v1/ws` (WebSocket streaming search with server-side cancellation).
 - Append `episodes=true` to the ratings endpoints when you need the wrapper response with episode context.
 - The portal uses direct Google OIDC in Nuxt and stores users, sessions, and API keys in Postgres.
 

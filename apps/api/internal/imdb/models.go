@@ -17,6 +17,7 @@ type QueryService interface {
 	GetStats(ctx context.Context) (Stats, error)
 	GetRating(ctx context.Context, tconst string) (Rating, error)
 	GetRatingWithEpisodes(ctx context.Context, tconst string) (RatingWithEpisodes, error)
+	SearchTitles(ctx context.Context, query TitleSearchQuery) (TitleSearchResponse, error)
 }
 
 type Repository interface {
@@ -25,6 +26,7 @@ type Repository interface {
 	GetStats(ctx context.Context) (Stats, error)
 	GetRating(ctx context.Context, tconst string) (Rating, error)
 	GetRatingWithEpisodes(ctx context.Context, tconst string) (RatingWithEpisodes, error)
+	SearchTitles(ctx context.Context, query TitleSearchQuery) (TitleSearchResponse, error)
 }
 
 type Snapshot struct {
@@ -70,4 +72,27 @@ type RatingWithEpisodes struct {
 	Rating               *Rating         `json:"rating,omitempty"`
 	EpisodesParentTconst string          `json:"episodesParentTconst,omitempty"`
 	Episodes             []EpisodeRating `json:"episodes"`
+}
+
+type TitleSearchQuery struct {
+	Q     string
+	Types []string
+	Limit int
+}
+
+type TitleSearchResult struct {
+	Tconst       string `json:"tconst"`
+	TitleType    string `json:"titleType"`
+	PrimaryTitle string `json:"primaryTitle"`
+	StartYear    *int   `json:"startYear,omitempty"`
+}
+
+type TitleSearchMeta struct {
+	SnapshotID int64 `json:"snapshotId"`
+	Count      int   `json:"count"`
+}
+
+type TitleSearchResponse struct {
+	Results []TitleSearchResult `json:"results"`
+	Meta    TitleSearchMeta     `json:"meta"`
 }

@@ -3,7 +3,7 @@ layout: home
 title: Nexio IMDb docs
 hero:
   name: Nexio IMDb docs
-  text: Internal ratings-only API, portal, and self-hosting guidance for the IMDb platform.
+  text: Internal ratings and title search API, portal, and self-hosting guidance for the IMDb platform.
   tagline: Built with VitePress and deployed to GitHub Pages.
   actions:
     - theme: brand
@@ -14,7 +14,7 @@ hero:
       link: https://github.com/johnneerdael/nexio-imdbapi
 features:
   - title: API contract
-    details: Keep the ratings contract, authentication, and endpoint behavior close to the implementation.
+    details: Keep the ratings and title search contract, authentication, and endpoint behavior close to the implementation.
   - title: Portal notes
     details: Document how the Nuxt portal, Google auth, and API key flows fit together.
   - title: Self-hosting
@@ -33,6 +33,6 @@ independently.
 
 ## Next steps
 
-The published sections cover the ratings API surface, the internal portal, and
+The published sections cover the ratings and title search API surface, the internal portal, and
 the self-hosting story. The navigation and theme are already scaffolded so the
 documentation can grow without changing the site structure.

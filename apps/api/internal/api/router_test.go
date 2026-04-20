@@ -348,6 +348,208 @@ func TestBulkGetRatingsRejectsMoreThan250Identifiers(t *testing.T) {
 	}
 }
 
+func newAuthRouter(svc imdb.QueryService) http.Handler {
+	return NewRouter(svc, stubAuthenticator{
+		authenticate: func(context.Context, string) (*auth.Principal, error) {
+			return &auth.Principal{KeyID: 1, Prefix: "test"}, nil
+		},
+	}, nil)
+}
+
+func TestSearchTitlesRejects_q_ShorterThan2(t *testing.T) {
+	t.Parallel()
+
+	router := newAuthRouter(stubService{})
+	req := httptest.NewRequest(http.MethodGet, "/v1/titles/search?q=a", nil)
+	req.Header.Set("X-API-Key", "valid-key")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSearchTitlesRejects_q_Empty(t *testing.T) {
+	t.Parallel()
+
+	router := newAuthRouter(stubService{})
+	req := httptest.NewRequest(http.MethodGet, "/v1/titles/search", nil)
+	req.Header.Set("X-API-Key", "valid-key")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSearchTitlesRejectsUnknownType(t *testing.T) {
+	t.Parallel()
+
+	router := newAuthRouter(stubService{})
+	req := httptest.NewRequest(http.MethodGet, "/v1/titles/search?q=matrix&types=short", nil)
+	req.Header.Set("X-API-Key", "valid-key")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSearchTitlesRejectsInvalidLimit(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"0", "51", "abc", "-1"} {
+		raw := raw
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+
+			router := newAuthRouter(stubService{})
+			req := httptest.NewRequest(http.MethodGet, "/v1/titles/search?q=matrix&limit="+raw, nil)
+			req.Header.Set("X-API-Key", "valid-key")
+			rec := httptest.NewRecorder()
+
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("limit=%s: expected 400, got %d body=%s", raw, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestSearchTitlesDefaultsTypesToBoth(t *testing.T) {
+	t.Parallel()
+
+	var gotTypes []string
+	router := newAuthRouter(stubService{
+		searchTitles: func(_ context.Context, q imdb.TitleSearchQuery) (imdb.TitleSearchResponse, error) {
+			gotTypes = q.Types
+			return imdb.TitleSearchResponse{Results: []imdb.TitleSearchResult{}}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/titles/search?q=matrix", nil)
+	req.Header.Set("X-API-Key", "valid-key")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(gotTypes) != 2 {
+		t.Fatalf("expected 2 types, got %v", gotTypes)
+	}
+}
+
+func TestSearchTitlesDefaultsLimitTo10(t *testing.T) {
+	t.Parallel()
+
+	var gotLimit int
+	router := newAuthRouter(stubService{
+		searchTitles: func(_ context.Context, q imdb.TitleSearchQuery) (imdb.TitleSearchResponse, error) {
+			gotLimit = q.Limit
+			return imdb.TitleSearchResponse{Results: []imdb.TitleSearchResult{}}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/titles/search?q=matrix", nil)
+	req.Header.Set("X-API-Key", "valid-key")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if gotLimit != 10 {
+		t.Fatalf("expected limit 10, got %d", gotLimit)
+	}
+}
+
+func TestSearchTitlesSetsCacheControlHeader(t *testing.T) {
+	t.Parallel()
+
+	router := newAuthRouter(stubService{})
+	req := httptest.NewRequest(http.MethodGet, "/v1/titles/search?q=matrix", nil)
+	req.Header.Set("X-API-Key", "valid-key")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	cc := rec.Header().Get("Cache-Control")
+	if cc != "public, max-age=60, stale-while-revalidate=300" {
+		t.Fatalf("unexpected Cache-Control %q", cc)
+	}
+}
+
+func TestSearchTitlesReturnsExpectedJSONShape(t *testing.T) {
+	t.Parallel()
+
+	year := 1999
+	router := newAuthRouter(stubService{
+		searchTitles: func(context.Context, imdb.TitleSearchQuery) (imdb.TitleSearchResponse, error) {
+			return imdb.TitleSearchResponse{
+				Results: []imdb.TitleSearchResult{
+					{Tconst: "tt0133093", TitleType: "movie", PrimaryTitle: "The Matrix", StartYear: &year},
+				},
+				Meta: imdb.TitleSearchMeta{SnapshotID: 42, Count: 1},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/titles/search?q=matrix", nil)
+	req.Header.Set("X-API-Key", "valid-key")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var body imdb.TitleSearchResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(body.Results))
+	}
+	r := body.Results[0]
+	if r.Tconst != "tt0133093" || r.TitleType != "movie" || r.PrimaryTitle != "The Matrix" {
+		t.Fatalf("unexpected result %#v", r)
+	}
+	if r.StartYear == nil || *r.StartYear != 1999 {
+		t.Fatalf("unexpected startYear %v", r.StartYear)
+	}
+	if body.Meta.SnapshotID != 42 || body.Meta.Count != 1 {
+		t.Fatalf("unexpected meta %#v", body.Meta)
+	}
+}
+
+func TestSearchTitlesRequiresAPIKey(t *testing.T) {
+	t.Parallel()
+
+	router := NewRouter(stubService{}, stubAuthenticator{}, nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/titles/search?q=matrix", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rec.Code)
+	}
+}
+
 func TestRemovedIMDbEndpointsReturn404(t *testing.T) {
 	t.Parallel()
 
@@ -374,6 +576,7 @@ type stubService struct {
 	getStats              func(context.Context) (imdb.Stats, error)
 	getRating             func(context.Context, string) (imdb.Rating, error)
 	getRatingWithEpisodes func(context.Context, string) (imdb.RatingWithEpisodes, error)
+	searchTitles          func(context.Context, imdb.TitleSearchQuery) (imdb.TitleSearchResponse, error)
 }
 
 func (s stubService) Ready(ctx context.Context) error {
@@ -409,6 +612,13 @@ func (s stubService) GetRatingWithEpisodes(ctx context.Context, tconst string) (
 		return s.getRatingWithEpisodes(ctx, tconst)
 	}
 	return imdb.RatingWithEpisodes{}, nil
+}
+
+func (s stubService) SearchTitles(ctx context.Context, query imdb.TitleSearchQuery) (imdb.TitleSearchResponse, error) {
+	if s.searchTitles != nil {
+		return s.searchTitles(ctx, query)
+	}
+	return imdb.TitleSearchResponse{Results: []imdb.TitleSearchResult{}}, nil
 }
 
 type stubAuthenticator struct {

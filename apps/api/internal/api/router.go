@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,10 +17,22 @@ import (
 	"nexio-imdb/apps/api/internal/imdb"
 )
 
+type contextKey int
+
+const principalCtxKey contextKey = iota
+
+// principalFromContext retrieves the authenticated principal stored by
+// requireAPIKey. Returns nil if not present.
+func principalFromContext(ctx context.Context) *auth.Principal {
+	p, _ := ctx.Value(principalCtxKey).(*auth.Principal)
+	return p
+}
+
 type Handler struct {
-	service imdb.QueryService
-	auth    auth.Authenticator
-	limiter RateLimiter
+	service     imdb.QueryService
+	auth        auth.Authenticator
+	limiter     RateLimiter
+	connections *ConnectionCounter
 }
 
 type errorEnvelope struct {
@@ -32,9 +46,10 @@ type apiError struct {
 
 func NewRouter(service imdb.QueryService, authenticator auth.Authenticator, limiter RateLimiter) http.Handler {
 	handler := Handler{
-		service: service,
-		auth:    authenticator,
-		limiter: limiter,
+		service:     service,
+		auth:        authenticator,
+		limiter:     limiter,
+		connections: NewConnectionCounter(maxConcurrentSocketsPerKey),
 	}
 
 	router := chi.NewRouter()
@@ -52,6 +67,8 @@ func NewRouter(service imdb.QueryService, authenticator auth.Authenticator, limi
 		r.Get("/meta/stats", handler.getStats)
 		r.Get("/ratings/{tconst}", handler.getRating)
 		r.Post("/ratings/bulk", handler.bulkGetRatings)
+		r.Get("/titles/search", handler.searchTitles)
+		r.Get("/ws", handler.websocketSearch)
 	})
 
 	return router
@@ -150,6 +167,60 @@ func (h Handler) bulkGetRatings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"results": results, "missing": missing})
 }
 
+var allowedTitleTypes = map[string]bool{
+	"movie":    true,
+	"tvSeries": true,
+}
+
+func (h Handler) searchTitles(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(q) < 2 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "q must be at least 2 characters")
+		return
+	}
+
+	types := []string{"movie", "tvSeries"}
+	if rawTypes := strings.TrimSpace(r.URL.Query().Get("types")); rawTypes != "" {
+		parts := strings.Split(rawTypes, ",")
+		types = types[:0]
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if !allowedTitleTypes[p] {
+				writeError(w, http.StatusBadRequest, "invalid_request", "types must be movie and/or tvSeries")
+				return
+			}
+			types = append(types, p)
+		}
+		if len(types) == 0 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "types must be movie and/or tvSeries")
+			return
+		}
+	}
+
+	limit := 10
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil || parsed < 1 || parsed > 50 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "limit must be an integer between 1 and 50")
+			return
+		}
+		limit = parsed
+	}
+
+	resp, err := h.service.SearchTitles(r.Context(), imdb.TitleSearchQuery{
+		Q:     q,
+		Types: types,
+		Limit: limit,
+	})
+	if err != nil {
+		handleServiceError(w, err)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=60, stale-while-revalidate=300")
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (h Handler) requireAPIKey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiKey := strings.TrimSpace(r.Header.Get("X-API-Key"))
@@ -181,7 +252,8 @@ func (h Handler) requireAPIKey(next http.Handler) http.Handler {
 			}
 		}
 
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), principalCtxKey, principal)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

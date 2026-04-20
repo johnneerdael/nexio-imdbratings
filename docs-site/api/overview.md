@@ -16,6 +16,8 @@ The API is organized by resource:
 - `GET /v1/meta/stats` for aggregate counts
 - `GET /v1/ratings/{tconst}` for ratings lookup
 - `POST /v1/ratings/bulk` for synchronous small-batch ratings lookups
+- `GET /v1/titles/search` for prefix-based title search across movies and TV series
+- `GET /v1/ws` for WebSocket streaming search — a persistent-connection alternative to `/v1/titles/search` with server-side cancellation, optimised for typeahead
 
 Every `/v1/*` route requires an API key. The health routes do not.
 

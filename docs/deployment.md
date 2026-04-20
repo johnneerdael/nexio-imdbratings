@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide documents a production deployment for the Nexio IMDb ratings-only platform on a single Linux host serving:
+This guide documents a production deployment for the Nexio IMDb API platform on a single Linux host serving:
 
 - `https://api.nexioapp.org/` for the Nuxt portal
 - `https://api.nexioapp.org/docs` for API docs

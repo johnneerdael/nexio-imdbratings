@@ -1,8 +1,8 @@
 FORMAT: 1A
 
-# Nexio IMDb Ratings API
+# Nexio IMDb API
 
-Internal, non-commercial ratings-only IMDb dataset API for Nexio.
+Internal, non-commercial IMDb dataset API for Nexio providing ratings and title search.
 
 Every `/v1/*` route requires an API key via `X-API-Key` or `Authorization: Bearer`.
 
@@ -77,6 +77,174 @@ Set `episodes=true` to make each entry in `results` use the `RatingWithEpisodes`
 
 + Response 400 (application/json)
     + Attributes (ErrorEnvelope)
+
+# Group Titles
+
+## Titles Search [/v1/titles/search{?q,types,limit}]
+
+### Search titles [GET]
+
+Search IMDb titles by prefix. Returns movies and/or TV series ranked by exact match, then prefix match, then newest year.
+
++ Parameters
+    + q: `matrix` (string, required) - Search query. Minimum length 2 characters.
+    + types: `movie,tvSeries` (string, optional) - Comma-separated content types to include. Allowed values: `movie`, `tvSeries`. Defaults to both.
+    + limit: `10` (number, optional) - Maximum number of results to return. Range 1–50. Default 10.
+
++ Request (application/json)
+    + Headers
+
+            X-API-Key: abcdef12.00112233445566778899aabbccddeeff0011223344556677
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+              "results": [
+                {
+                  "tconst": "tt0133093",
+                  "titleType": "movie",
+                  "primaryTitle": "The Matrix",
+                  "startYear": 1999
+                }
+              ],
+              "meta": {
+                "snapshotId": 42,
+                "count": 1
+              }
+            }
+
++ Response 400 (application/json)
+
+    Returned when `q` is shorter than 2 characters, `types` contains an unrecognised value, or `limit` is outside the 1–50 range.
+
+    + Attributes (ErrorEnvelope)
+
++ Response 401 (application/json)
+
+    Returned when the `X-API-Key` header is missing or the key fails validation.
+
+    + Attributes (ErrorEnvelope)
+
++ Response 429 (application/json)
+
+    Returned when the rate limit for the API key is exceeded.
+
+    + Attributes (ErrorEnvelope)
+
+# Group WebSocket
+
+## WebSocket Streaming Search [/v1/ws]
+
+API Blueprint has no native WebSocket grammar. This section documents the `/v1/ws` endpoint using descriptive prose and JSON frame examples.
+
+### Overview
+
+`GET /v1/ws` upgrades an HTTP connection to WebSocket and provides the same title-search capability as `GET /v1/titles/search`, optimised for typeahead. The connection is persistent, the server cancels superseded in-flight queries automatically, and only one search can be in flight per socket at a time.
+
+### Upgrade Request
+
+The client initiates a standard HTTP Upgrade:
+
+```
+GET /v1/ws HTTP/1.1
+Host: api.nexioapp.org
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: <base64-nonce>
+Sec-WebSocket-Version: 13
+X-API-Key: abcdef12.00112233445566778899aabbccddeeff0011223344556677
+```
+
+Alternatively use `Authorization: Bearer <key>` in place of `X-API-Key`. Both header forms are identical to the REST authentication model.
+
+### Authentication
+
+Authentication is evaluated on the Upgrade request using the same `X-API-Key` / `Authorization: Bearer` mechanism as every `/v1/*` REST route. A missing or invalid key returns `401` before the upgrade completes. A valid key that has exhausted its rate-limit bucket returns `429`.
+
+**Browser note**: browsers cannot set arbitrary HTTP headers on `new WebSocket(url)`. The recommended workaround is to obtain a short-lived session cookie through the portal's auth flow, or route WebSocket connections through an authorization-proxy that injects the header. Node.js and CLI clients can set `X-API-Key` directly on the Upgrade request.
+
+### Rate Limits
+
+- The Upgrade request counts as one call against the same token-bucket quota used by REST requests. A `429` on the Upgrade means the bucket was empty.
+- A maximum of **5 concurrent open WebSocket connections** per API key is permitted. A 6th concurrent connection is rejected with `429` at Upgrade time.
+- After a successful Upgrade, individual client messages are **not** metered against the REST quota. Each socket has a local safety ceiling of **20 messages per second**. Excess messages receive a `{"type":"error","code":"rate_limited"}` frame; the socket remains open.
+
+### Message Protocol
+
+All frames are UTF-8 text frames carrying JSON objects. Binary frames are not used.
+
+#### Client → Server
+
+**search** — submit or replace the current query. Sending a new `search` frame while a previous query is in flight cancels the previous query server-side.
+
+```json
+{"type":"search","seq":1,"q":"matrix","types":["movie","tvSeries"]}
+```
+
+The WebSocket endpoint always returns at most 10 results. Clients needing larger result sets should use `GET /v1/titles/search`.
+
+| Field    | Type           | Required | Default              | Notes                                                        |
+|----------|----------------|----------|----------------------|--------------------------------------------------------------|
+| `type`   | string         | yes      | —                    | Must be `"search"`.                                          |
+| `seq`    | uint64         | yes      | —                    | Client-supplied monotonic counter. Echoed verbatim in reply. |
+| `q`      | string         | yes      | —                    | Search query. Trimmed. Minimum 2 characters.                 |
+| `types`  | array[string]  | no       | `["movie","tvSeries"]` | Allowed values: `"movie"`, `"tvSeries"`.                  |
+
+**ping** — keepalive probe. The server replies with a `pong` frame carrying the same `seq`.
+
+```json
+{"type":"ping","seq":2}
+```
+
+#### Server → Client
+
+**result** — search completed. `results` and `meta` are identical in shape to the REST `/v1/titles/search` response.
+
+```json
+{"type":"result","seq":1,"results":[{"tconst":"tt0133093","titleType":"movie","primaryTitle":"The Matrix","startYear":1999}],"meta":{"snapshotId":42,"count":1}}
+```
+
+**cancelled** — emitted when a new `search` frame arrived before the previous query finished. `seq` echoes the cancelled query's sequence number.
+
+```json
+{"type":"cancelled","seq":1}
+```
+
+**error** — the request was rejected or a server fault occurred. `seq` echoes the triggering message's sequence number.
+
+```json
+{"type":"error","seq":1,"code":"invalid_request","message":"q must be at least 2 characters"}
+```
+
+| `code`             | Meaning                                                                        |
+|--------------------|--------------------------------------------------------------------------------|
+| `invalid_request`  | Bad message shape, `q` too short, or unknown `types` value.                    |
+| `rate_limited`     | Local per-socket 20 msg/s ceiling exceeded. Socket stays open.                 |
+| `internal_error`   | Unexpected server fault.                                                       |
+
+**pong** — reply to a `ping`. `seq` echoes the ping's sequence number.
+
+```json
+{"type":"pong","seq":2}
+```
+
+### In-Flight Query Semantics
+
+Only one `search` can be in flight per socket at a time. When the client sends a second `search` before the first has resolved:
+
+1. The server cancels the first query.
+2. The server emits `{"type":"cancelled","seq":<prior-seq>}`.
+3. The server begins processing the new query and eventually emits `{"type":"result","seq":<new-seq>,...}`.
+
+### WebSocket Close Codes
+
+| Code   | Meaning                                                                          |
+|--------|----------------------------------------------------------------------------------|
+| `1000` | Normal closure. Client or server closed the connection cleanly.                  |
+| `1001` | Going away. Server is shutting down or the ping keepalive timed out.             |
+| `1008` | Policy violation. Client is sending faster than the 20 msg/s safety ceiling and was not backing off after repeated `rate_limited` errors. |
 
 # Data Structures
 

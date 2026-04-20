@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"bytes"
+	"encoding/csv"
 	"io"
 	"log"
 	"slices"
@@ -69,17 +70,17 @@ func TestDownloadProgressReaderLogsProgressAndCompletion(t *testing.T) {
 	}
 }
 
-func TestNewRunnerRegistersRatingsDatasetsOnly(t *testing.T) {
+func TestNewRunnerRegistersAllDatasets(t *testing.T) {
 	t.Parallel()
 
 	runner := NewRunner(nil, nil, "https://example.com/", nil, false, 0, "")
 
-	if got, want := len(runner.datasets), 2; got != want {
+	if got, want := len(runner.datasets), 3; got != want {
 		t.Fatalf("expected %d datasets, got %d", want, got)
 	}
 
-	names := []string{runner.datasets[0].Name, runner.datasets[1].Name}
-	expected := []string{"title.ratings.tsv.gz", "title.episode.tsv.gz"}
+	names := []string{runner.datasets[0].Name, runner.datasets[1].Name, runner.datasets[2].Name}
+	expected := []string{"title.ratings.tsv.gz", "title.episode.tsv.gz", "title.basics.tsv.gz"}
 	if !slices.Equal(names, expected) {
 		t.Fatalf("expected datasets %v, got %v", expected, names)
 	}
@@ -122,37 +123,97 @@ func TestDatasetRequiresRefreshTreatsMissingValidatorsAsChanged(t *testing.T) {
 	}
 }
 
-func TestIndexBuildPlanIsRatingsOnly(t *testing.T) {
+func TestIndexBuildPlanCoversAllTables(t *testing.T) {
 	t.Parallel()
 
 	base := buildIndexPlans(tableSet{
 		TitleRatings:  "title_ratings_shadow_7",
 		TitleEpisodes: "title_episodes_shadow_7",
+		TitleBasics:   "title_basics_shadow_7",
 	})
 
 	baseNames := make([]string, 0, len(base))
 	for _, item := range base {
 		baseNames = append(baseNames, item.name)
 	}
-	expectedBase := []string{"index ratings votes", "index episodes parent"}
+	expectedBase := []string{"index ratings votes", "index episodes parent", "index basics title trgm", "index basics type year"}
 	if !slices.Equal(baseNames, expectedBase) {
 		t.Fatalf("expected base indexes %v, got %v", expectedBase, baseNames)
 	}
 }
 
-func TestTableSetAllReturnsRatingsTablesOnly(t *testing.T) {
+func TestTableSetAllReturnsAllTables(t *testing.T) {
 	t.Parallel()
 
-	if got, want := liveTables().all(), []string{"title_ratings", "title_episodes"}; !slices.Equal(got, want) {
+	if got, want := liveTables().all(), []string{"title_ratings", "title_episodes", "title_basics"}; !slices.Equal(got, want) {
 		t.Fatalf("expected live tables %v, got %v", want, got)
 	}
 
 	tables := shadowTables(7)
-	if got, want := tables.all(), []string{"title_ratings_shadow_7", "title_episodes_shadow_7"}; !slices.Equal(got, want) {
+	if got, want := tables.all(), []string{"title_ratings_shadow_7", "title_episodes_shadow_7", "title_basics_shadow_7"}; !slices.Equal(got, want) {
 		t.Fatalf("expected shadow tables %v, got %v", want, got)
 	}
 
-	if got, want := previousTables().all(), []string{"title_ratings_previous", "title_episodes_previous"}; !slices.Equal(got, want) {
+	if got, want := previousTables().all(), []string{"title_ratings_previous", "title_episodes_previous", "title_basics_previous"}; !slices.Equal(got, want) {
 		t.Fatalf("expected previous tables %v, got %v", want, got)
+	}
+}
+
+func TestTransformTSVToCopyCSVBasicsFixture(t *testing.T) {
+	t.Parallel()
+
+	// Golden fixture: one movie, one tvSeries, one short, one entry with \N year.
+	// The transform step is type-agnostic — it copies all rows verbatim.
+	// Filtering by titleType happens in the SQL INSERT during normalizeSnapshot /
+	// mergeBasicsDelta, not in the transform layer.
+	input := strings.Join([]string{
+		"tconst\ttitleType\tprimaryTitle\toriginalTitle\tisAdult\tstartYear\tendYear\truntimeMinutes\tgenres",
+		"tt0133093\tmovie\tThe Matrix\tThe Matrix\t0\t1999\t\\N\t136\tAction,Sci-Fi",
+		"tt0903747\ttvSeries\tBreaking Bad\tBreaking Bad\t0\t2008\t2013\t45\tCrime,Drama,Thriller",
+		"tt0000001\tshort\tCarmencita\tCarmencita\t0\t1894\t\\N\t1\tDocumentary,Short",
+		"tt9999999\tmovie\tUnknown Year\tUnknown Year\t0\t\\N\t\\N\t\\N\t\\N",
+	}, "\n") + "\n"
+
+	var out bytes.Buffer
+	if err := transformTSVToCopyCSV(strings.NewReader(input), &out, 9); err != nil {
+		t.Fatalf("transformTSVToCopyCSV returned error: %v", err)
+	}
+
+	got := out.String()
+
+	// Header must be stripped.
+	if strings.Contains(got, "tconst\ttitleType") {
+		t.Fatalf("expected header to be stripped, got %q", got)
+	}
+
+	// All four data rows must be present (filtering is SQL-side, not here).
+	for _, tconst := range []string{"tt0133093", "tt0903747", "tt0000001", "tt9999999"} {
+		if !strings.Contains(got, tconst) {
+			t.Fatalf("expected tconst %s to be present in output, got %q", tconst, got)
+		}
+	}
+
+	// \N values must be passed through as-is so COPY NULL '\N' can convert them.
+	if !strings.Contains(got, `\N`) {
+		t.Fatalf("expected \\N sentinel to be preserved for COPY NULL handling, got %q", got)
+	}
+
+	// Verify column count: each output row must have exactly 9 tab-separated fields.
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("expected 4 output lines, got %d: %q", len(lines), got)
+	}
+	for i, line := range lines {
+		// csv writer with tab delimiter — fields may be quoted, but splitting on
+		// unquoted tabs gives a lower bound; use a csv reader for accuracy.
+		r := csv.NewReader(strings.NewReader(line))
+		r.Comma = '\t'
+		fields, err := r.Read()
+		if err != nil {
+			t.Fatalf("line %d: csv parse error: %v", i+1, err)
+		}
+		if len(fields) != 9 {
+			t.Fatalf("line %d: expected 9 fields, got %d: %q", i+1, len(fields), line)
+		}
 	}
 }

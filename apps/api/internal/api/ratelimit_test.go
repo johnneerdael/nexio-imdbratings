@@ -166,12 +166,20 @@ func TestRouterReturns429WhenRateLimitExceeded(t *testing.T) {
 }
 
 type stubRateLimiter struct {
-	allow func(*auth.Principal, *http.Request) (RateLimitDecision, error)
+	allow        func(*auth.Principal, *http.Request) (RateLimitDecision, error)
+	allowConnect func(*auth.Principal) (RateLimitDecision, error)
 }
 
 func (s stubRateLimiter) Allow(principal *auth.Principal, r *http.Request) (RateLimitDecision, error) {
 	if s.allow != nil {
 		return s.allow(principal, r)
+	}
+	return RateLimitDecision{Allowed: true}, nil
+}
+
+func (s stubRateLimiter) AllowConnect(principal *auth.Principal) (RateLimitDecision, error) {
+	if s.allowConnect != nil {
+		return s.allowConnect(principal)
 	}
 	return RateLimitDecision{Allowed: true}, nil
 }

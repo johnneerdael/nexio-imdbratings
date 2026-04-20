@@ -45,7 +45,9 @@ export default defineConfig({
         text: 'API',
         items: [
           { text: 'Overview', link: '/api/overview' },
-          { text: 'Authentication', link: '/api/authentication' }
+          { text: 'Authentication', link: '/api/authentication' },
+          { text: 'Title Search', link: '/api/titles-search' },
+          { text: 'WebSocket Streaming', link: '/api/websocket' }
         ]
       },
       {

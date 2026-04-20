@@ -148,6 +148,63 @@ func TestGetRatingWithEpisodesReturnsPlainRatingWhenNoEpisodeRelationExists(t *t
 	}
 }
 
+func TestSearchTitlesDelegatesAndPropagatesResults(t *testing.T) {
+	t.Parallel()
+
+	year := 1999
+	want := TitleSearchResponse{
+		Results: []TitleSearchResult{
+			{Tconst: "tt0133093", TitleType: "movie", PrimaryTitle: "The Matrix", StartYear: &year},
+		},
+		Meta: TitleSearchMeta{SnapshotID: 42, Count: 1},
+	}
+
+	service := NewService(stubRepository{
+		searchTitles: func(_ context.Context, q TitleSearchQuery) (TitleSearchResponse, error) {
+			if q.Q != "matrix" {
+				t.Fatalf("unexpected query %q", q.Q)
+			}
+			if len(q.Types) != 2 {
+				t.Fatalf("unexpected types %v", q.Types)
+			}
+			if q.Limit != 10 {
+				t.Fatalf("unexpected limit %d", q.Limit)
+			}
+			return want, nil
+		},
+	})
+
+	got, err := service.SearchTitles(context.Background(), TitleSearchQuery{
+		Q:     "matrix",
+		Types: []string{"movie", "tvSeries"},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("SearchTitles returned error: %v", err)
+	}
+	if len(got.Results) != 1 || got.Results[0].Tconst != "tt0133093" {
+		t.Fatalf("unexpected results %#v", got.Results)
+	}
+	if got.Meta.SnapshotID != 42 || got.Meta.Count != 1 {
+		t.Fatalf("unexpected meta %#v", got.Meta)
+	}
+}
+
+func TestSearchTitlesPropagatesRepositoryError(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(stubRepository{
+		searchTitles: func(context.Context, TitleSearchQuery) (TitleSearchResponse, error) {
+			return TitleSearchResponse{}, ErrInvalidRequest
+		},
+	})
+
+	_, err := service.SearchTitles(context.Background(), TitleSearchQuery{Q: "x", Types: []string{"movie"}, Limit: 5})
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("expected ErrInvalidRequest, got %v", err)
+	}
+}
+
 func TestGetRatingWithEpisodesReturnsNotFoundWithoutRatingOrEpisodeRelation(t *testing.T) {
 	t.Parallel()
 
@@ -169,6 +226,7 @@ type stubRepository struct {
 	getStats              func(context.Context) (Stats, error)
 	getRating             func(context.Context, string) (Rating, error)
 	getRatingWithEpisodes func(context.Context, string) (RatingWithEpisodes, error)
+	searchTitles          func(context.Context, TitleSearchQuery) (TitleSearchResponse, error)
 }
 
 func (s stubRepository) Ping(ctx context.Context) error {
@@ -204,6 +262,13 @@ func (s stubRepository) GetRatingWithEpisodes(ctx context.Context, tconst string
 		return s.getRatingWithEpisodes(ctx, tconst)
 	}
 	return RatingWithEpisodes{}, nil
+}
+
+func (s stubRepository) SearchTitles(ctx context.Context, query TitleSearchQuery) (TitleSearchResponse, error) {
+	if s.searchTitles != nil {
+		return s.searchTitles(ctx, query)
+	}
+	return TitleSearchResponse{Results: []TitleSearchResult{}}, nil
 }
 
 func intPtr(v int) *int { return &v }

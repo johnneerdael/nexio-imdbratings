@@ -29,3 +29,7 @@ func (s *Service) GetRating(ctx context.Context, tconst string) (Rating, error) 
 func (s *Service) GetRatingWithEpisodes(ctx context.Context, tconst string) (RatingWithEpisodes, error) {
 	return s.repo.GetRatingWithEpisodes(ctx, tconst)
 }
+
+func (s *Service) SearchTitles(ctx context.Context, query TitleSearchQuery) (TitleSearchResponse, error) {
+	return s.repo.SearchTitles(ctx, query)
+}

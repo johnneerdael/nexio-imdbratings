@@ -251,6 +251,69 @@ func (s *Store) listEpisodeRatings(ctx context.Context, parentTconst string) ([]
 	return items, nil
 }
 
+func (s *Store) mostRecentActiveSnapshotID(ctx context.Context) (int64, error) {
+	var id int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT id
+		FROM imdb_snapshots
+		WHERE is_active = TRUE
+		ORDER BY imported_at DESC, id DESC
+		LIMIT 1
+	`).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("most recent active snapshot id: %w", err)
+	}
+	return id, nil
+}
+
+func (s *Store) SearchTitles(ctx context.Context, query imdb.TitleSearchQuery) (imdb.TitleSearchResponse, error) {
+	snapshotID, err := s.mostRecentActiveSnapshotID(ctx)
+	if err != nil {
+		return imdb.TitleSearchResponse{}, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT tconst, title_type, primary_title, start_year
+		FROM title_basics
+		WHERE title_type = ANY($1)
+		  AND primary_title ILIKE $2
+		ORDER BY
+		  CASE WHEN lower(primary_title) = lower($3) THEN 0
+		       WHEN lower(primary_title) LIKE lower($3) || '%' THEN 1
+		       ELSE 2 END,
+		  start_year DESC NULLS LAST,
+		  primary_title ASC
+		LIMIT $4
+	`, query.Types, "%"+query.Q+"%", query.Q, query.Limit)
+	if err != nil {
+		return imdb.TitleSearchResponse{}, fmt.Errorf("search titles: %w", err)
+	}
+	defer rows.Close()
+
+	results := make([]imdb.TitleSearchResult, 0)
+	for rows.Next() {
+		var item imdb.TitleSearchResult
+		if err := rows.Scan(&item.Tconst, &item.TitleType, &item.PrimaryTitle, &item.StartYear); err != nil {
+			return imdb.TitleSearchResponse{}, fmt.Errorf("scan title search result: %w", err)
+		}
+		results = append(results, item)
+	}
+	if err := rows.Err(); err != nil {
+		return imdb.TitleSearchResponse{}, fmt.Errorf("iterate title search results: %w", err)
+	}
+
+	return imdb.TitleSearchResponse{
+		Results: results,
+		Meta: imdb.TitleSearchMeta{
+			SnapshotID: snapshotID,
+			Count:      len(results),
+		},
+	}, nil
+}
+
 func resolveRatingWithEpisodes(ctx context.Context, tconst string, resolver ratingEpisodesResolver) (imdb.RatingWithEpisodes, error) {
 	result := imdb.RatingWithEpisodes{
 		RequestTconst: tconst,

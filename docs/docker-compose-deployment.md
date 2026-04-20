@@ -1,6 +1,6 @@
 # Docker Compose Deployment Guide
 
-This guide deploys the full ratings-only stack with Docker Compose:
+This guide deploys the full stack with Docker Compose:
 
 - PostgreSQL 16
 - automatic schema patch container

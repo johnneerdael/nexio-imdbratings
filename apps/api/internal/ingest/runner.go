@@ -54,16 +54,19 @@ type remoteDataset struct {
 type tableSet struct {
 	TitleRatings  string
 	TitleEpisodes string
+	TitleBasics   string
 }
 
 type normalizeCounts struct {
 	Ratings  int64
 	Episodes int64
+	Basics   int64
 }
 
 type snapshotCounts struct {
 	Ratings  int64
 	Episodes int64
+	Basics   int64
 }
 
 type syncMode string
@@ -87,6 +90,7 @@ func liveTables() tableSet {
 	return tableSet{
 		TitleRatings:  "title_ratings",
 		TitleEpisodes: "title_episodes",
+		TitleBasics:   "title_basics",
 	}
 }
 
@@ -95,6 +99,7 @@ func shadowTables(snapshotID int64) tableSet {
 	return tableSet{
 		TitleRatings:  "title_ratings" + suffix,
 		TitleEpisodes: "title_episodes" + suffix,
+		TitleBasics:   "title_basics" + suffix,
 	}
 }
 
@@ -102,11 +107,12 @@ func previousTables() tableSet {
 	return tableSet{
 		TitleRatings:  "title_ratings_previous",
 		TitleEpisodes: "title_episodes_previous",
+		TitleBasics:   "title_basics_previous",
 	}
 }
 
 func (t tableSet) all() []string {
-	return []string{t.TitleRatings, t.TitleEpisodes}
+	return []string{t.TitleRatings, t.TitleEpisodes, t.TitleBasics}
 }
 
 func NewRunner(pool *pgxpool.Pool, client *http.Client, baseURL string, logger *log.Logger, forceFullRefresh bool, deltaBatchSize int, maintenanceWorkMem string) *Runner {
@@ -144,6 +150,14 @@ func NewRunner(pool *pgxpool.Pool, client *http.Client, baseURL string, logger *
 				Columns:     4,
 				ColumnDefs:  "(tconst TEXT, parent_tconst TEXT, season_number TEXT, episode_number TEXT)",
 				CopyColumns: "(tconst, parent_tconst, season_number, episode_number)",
+			},
+			{
+				Name:        "title.basics.tsv.gz",
+				Filename:    "title.basics.tsv.gz",
+				BaseTable:   "staging_title_basics_raw",
+				Columns:     9,
+				ColumnDefs:  "(tconst TEXT, titleType TEXT, primaryTitle TEXT, originalTitle TEXT, isAdult TEXT, startYear TEXT, endYear TEXT, runtimeMinutes TEXT, genres TEXT)",
+				CopyColumns: "(tconst, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, genres)",
 			},
 		},
 	}
@@ -314,7 +328,8 @@ func (r *Runner) activeSnapshotState(ctx context.Context) (ActiveSnapshotState, 
 		SELECT
 			id,
 			rating_count,
-			episode_count
+			episode_count,
+			title_basics_count
 		FROM imdb_snapshots
 		WHERE is_active = TRUE
 		ORDER BY imported_at DESC, id DESC
@@ -323,6 +338,7 @@ func (r *Runner) activeSnapshotState(ctx context.Context) (ActiveSnapshotState, 
 		&state.ID,
 		&state.Counts.Ratings,
 		&state.Counts.Episodes,
+		&state.Counts.Basics,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -352,11 +368,12 @@ func (r *Runner) createSnapshot(ctx context.Context, mode syncMode, baseline sna
 			imported_at,
 			is_active,
 			rating_count,
-			episode_count
+			episode_count,
+			title_basics_count
 		)
-		VALUES ('imdbws', 'importing', $1, $2, $3, $4, $5, '', NOW(), FALSE, $6, $7)
+		VALUES ('imdbws', 'importing', $1, $2, $3, $4, $5, '', NOW(), FALSE, $6, $7, $8)
 		RETURNING id
-	`, datasetVersion, sourceURL, sourceUpdatedAt, sourceETag, mode, baseline.Ratings, baseline.Episodes).Scan(&snapshotID)
+	`, datasetVersion, sourceURL, sourceUpdatedAt, sourceETag, mode, baseline.Ratings, baseline.Episodes, baseline.Basics).Scan(&snapshotID)
 	if err != nil {
 		return 0, fmt.Errorf("create snapshot row: %w", err)
 	}
@@ -589,6 +606,17 @@ func (r *Runner) createShadowTables(ctx context.Context, tx pgx.Tx, tables table
 				)
 			`, tables.TitleEpisodes),
 		},
+		{
+			name: "create shadow basics",
+			statement: fmt.Sprintf(`
+				CREATE UNLOGGED TABLE %s (
+					tconst TEXT PRIMARY KEY,
+					title_type TEXT NOT NULL,
+					primary_title TEXT NOT NULL,
+					start_year INTEGER
+				)
+			`, tables.TitleBasics),
+		},
 	}
 
 	for _, statement := range statements {
@@ -615,6 +643,8 @@ func buildIndexPlans(tables tableSet) []indexStatement {
 	return []indexStatement{
 		{name: "index ratings votes", statement: fmt.Sprintf(`CREATE INDEX %s ON %s(num_votes DESC)`, tables.TitleRatings+"_num_votes_idx", tables.TitleRatings)},
 		{name: "index episodes parent", statement: fmt.Sprintf(`CREATE INDEX %s ON %s(parent_tconst, season_number, episode_number)`, tables.TitleEpisodes+"_parent_idx", tables.TitleEpisodes)},
+		{name: "index basics title trgm", statement: fmt.Sprintf(`CREATE INDEX %s ON %s USING gin (primary_title gin_trgm_ops)`, tables.TitleBasics+"_primary_title_trgm_idx", tables.TitleBasics)},
+		{name: "index basics type year", statement: fmt.Sprintf(`CREATE INDEX %s ON %s(title_type, start_year DESC)`, tables.TitleBasics+"_type_year_idx", tables.TitleBasics)},
 	}
 }
 
@@ -627,11 +657,13 @@ func (r *Runner) promoteShadowTables(ctx context.Context, tx pgx.Tx, snapshotID 
 		statement string
 		args      []any
 	}{
-		{name: "drop previous ratings backup", statement: fmt.Sprintf(`DROP TABLE IF EXISTS %s, %s`, previous.TitleRatings, previous.TitleEpisodes)},
+		{name: "drop previous ratings backup", statement: fmt.Sprintf(`DROP TABLE IF EXISTS %s, %s, %s`, previous.TitleRatings, previous.TitleEpisodes, previous.TitleBasics)},
 		{name: "rename live ratings to backup", statement: fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, live.TitleRatings, previous.TitleRatings)},
 		{name: "rename live episodes to backup", statement: fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, live.TitleEpisodes, previous.TitleEpisodes)},
+		{name: "rename live basics to backup", statement: fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, live.TitleBasics, previous.TitleBasics)},
 		{name: "promote ratings", statement: fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, shadow.TitleRatings, live.TitleRatings)},
 		{name: "promote episodes", statement: fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, shadow.TitleEpisodes, live.TitleEpisodes)},
+		{name: "promote basics", statement: fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, shadow.TitleBasics, live.TitleBasics)},
 		{name: "deactivate previous snapshots", statement: `UPDATE imdb_snapshots SET is_active = FALSE WHERE id <> $1`, args: []any{snapshotID}},
 		{name: "finalize snapshot", statement: `
 			UPDATE imdb_snapshots
@@ -645,9 +677,10 @@ func (r *Runner) promoteShadowTables(ctx context.Context, tx pgx.Tx, snapshotID 
 				is_active = TRUE,
 				rating_count = $5,
 				episode_count = $6,
+				title_basics_count = $7,
 				notes = ''
 			WHERE id = $1
-		`, args: []any{snapshotID, datasetVersion, sourceUpdatedAt, joinRemoteValues(remote, func(item remoteDataset) string { return item.etag }), counts.Ratings, counts.Episodes}},
+		`, args: []any{snapshotID, datasetVersion, sourceUpdatedAt, joinRemoteValues(remote, func(item remoteDataset) string { return item.etag }), counts.Ratings, counts.Episodes, counts.Basics}},
 	}
 
 	for _, step := range promotionSteps {
@@ -667,8 +700,8 @@ func (r *Runner) promoteShadowTables(ctx context.Context, tx pgx.Tx, snapshotID 
 func (r *Runner) dropPreviousTables(ctx context.Context) error {
 	previous := previousTables()
 	_, err := r.pool.Exec(ctx, fmt.Sprintf(`
-		DROP TABLE IF EXISTS %s, %s
-	`, previous.TitleRatings, previous.TitleEpisodes))
+		DROP TABLE IF EXISTS %s, %s, %s
+	`, previous.TitleRatings, previous.TitleEpisodes, previous.TitleBasics))
 	if err != nil {
 		return fmt.Errorf("drop previous tables: %w", err)
 	}
@@ -737,6 +770,12 @@ func (r *Runner) importDeltaSnapshot(ctx context.Context, snapshotID int64, chan
 		case "title.episode.tsv.gz":
 			counts.Episodes, err = r.mergeEpisodesDelta(ctx, tx, stageTable)
 			affectedTables = []string{"title_episodes"}
+		case "title.basics.tsv.gz":
+			// selectSyncMode always returns syncModeFullRefresh, so importDeltaSnapshot
+			// is never called in practice. This case is present only to prevent an
+			// "unsupported delta dataset" error if that invariant ever changes.
+			counts.Basics, err = r.mergeBasicsDelta(ctx, tx, stageTable)
+			affectedTables = []string{"title_basics"}
 		default:
 			err = fmt.Errorf("unsupported delta dataset %s", item.spec.Name)
 		}
@@ -774,9 +813,10 @@ func (r *Runner) updateSnapshotProgress(ctx context.Context, snapshotID int64, c
 		UPDATE imdb_snapshots
 		SET
 			rating_count = $2,
-			episode_count = $3
+			episode_count = $3,
+			title_basics_count = $4
 		WHERE id = $1
-	`, snapshotID, counts.Ratings, counts.Episodes)
+	`, snapshotID, counts.Ratings, counts.Episodes, counts.Basics)
 	if err != nil {
 		return fmt.Errorf("update snapshot progress: %w", err)
 	}
@@ -805,9 +845,10 @@ func (r *Runner) finalizeDeltaSnapshot(ctx context.Context, snapshotID int64, re
 			is_active = TRUE,
 			rating_count = $5,
 			episode_count = $6,
+			title_basics_count = $7,
 			notes = ''
 		WHERE id = $1
-	`, snapshotID, datasetVersion, sourceUpdatedAt, joinRemoteValues(remote, func(item remoteDataset) string { return item.etag }), counts.Ratings, counts.Episodes); err != nil {
+	`, snapshotID, datasetVersion, sourceUpdatedAt, joinRemoteValues(remote, func(item remoteDataset) string { return item.etag }), counts.Ratings, counts.Episodes, counts.Basics); err != nil {
 		return fmt.Errorf("finalize delta snapshot: %w", err)
 	}
 	if err := upsertSyncStateWithExecutor(ctx, tx, remote, &snapshotID); err != nil {
@@ -996,9 +1037,31 @@ func (r *Runner) mergeEpisodesDelta(ctx context.Context, tx pgx.Tx, stageTable s
 	return count, nil
 }
 
+func (r *Runner) mergeBasicsDelta(ctx context.Context, tx pgx.Tx, stageTable string) (int64, error) {
+	if _, err := tx.Exec(ctx, `TRUNCATE title_basics`); err != nil {
+		return 0, fmt.Errorf("truncate title_basics for delta: %w", err)
+	}
+	tag, err := tx.Exec(ctx, fmt.Sprintf(`
+		INSERT INTO title_basics (tconst, title_type, primary_title, start_year)
+		SELECT
+			tconst,
+			titleType,
+			primaryTitle,
+			NULLIF(startYear, '')::INTEGER
+		FROM %s
+		WHERE tconst IS NOT NULL
+		  AND titleType IN ('movie', 'tvSeries')
+	`, stageTable))
+	if err != nil {
+		return 0, fmt.Errorf("merge basics delta: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (r *Runner) normalizeSnapshot(ctx context.Context, tx pgx.Tx, tables tableSet, snapshotID int64) (normalizeCounts, error) {
 	rawRatings := rawTableName(snapshotID, r.datasetByName("title.ratings.tsv.gz"))
 	rawEpisodes := rawTableName(snapshotID, r.datasetByName("title.episode.tsv.gz"))
+	rawBasics := rawTableName(snapshotID, r.datasetByName("title.basics.tsv.gz"))
 
 	type normalizeStep struct {
 		name      string
@@ -1034,6 +1097,17 @@ func (r *Runner) normalizeSnapshot(ctx context.Context, tx pgx.Tx, tables tableS
 			  AND e.parent_tconst IS NOT NULL
 			  AND e.parent_tconst <> ''
 		`, tables.TitleEpisodes, rawEpisodes)},
+		{name: "load basics", statement: fmt.Sprintf(`
+			INSERT INTO %s (tconst, title_type, primary_title, start_year)
+			SELECT
+				tconst,
+				titleType,
+				primaryTitle,
+				NULLIF(startYear, '')::INTEGER
+			FROM %s
+			WHERE tconst IS NOT NULL
+			  AND titleType IN ('movie', 'tvSeries')
+		`, tables.TitleBasics, rawBasics)},
 	}
 
 	r.logf("imdb sync snapshot %d normalization started", snapshotID)
@@ -1049,6 +1123,8 @@ func (r *Runner) normalizeSnapshot(ctx context.Context, tx pgx.Tx, tables tableS
 			counts.Ratings = tag.RowsAffected()
 		case "load episodes":
 			counts.Episodes = tag.RowsAffected()
+		case "load basics":
+			counts.Basics = tag.RowsAffected()
 		}
 	}
 
