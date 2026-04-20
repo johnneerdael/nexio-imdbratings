@@ -23,6 +23,9 @@ export async function searchTitlesQuery(
   const snapshotId = snapshotRows.length === 0 ? 0 : Number(snapshotRows[0].id);
 
   const pattern = `%${q}%`;
+  const typeCond = types
+    .map((t) => sql`title_type = ${t}`)
+    .reduce((acc, cur) => sql`${acc} OR ${cur}`);
   const rows = await sql<Array<{
     tconst: string;
     title_type: string;
@@ -31,7 +34,7 @@ export async function searchTitlesQuery(
   }>>`
     SELECT tconst, title_type, primary_title, start_year
     FROM title_basics
-    WHERE title_type IN ${sql(types)}
+    WHERE (${typeCond})
       AND primary_title ILIKE ${pattern}
     ORDER BY
       CASE WHEN lower(primary_title) = lower(${q}) THEN 0
