@@ -99,8 +99,7 @@ app.get("/search", async (c) => {
     return c.json(response);
   } catch (e) {
     console.error("search titles failed", e);
-    const detail = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-    return c.json({ error: { code: "internal_error", message: "internal server error", detail } }, 500);
+    return errInternal(c);
   }
 });
 
