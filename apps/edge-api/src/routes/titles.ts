@@ -34,12 +34,11 @@ export async function searchTitlesQuery(
   }>>`
     SELECT tconst, title_type, primary_title, start_year
     FROM title_basics
-    WHERE (${typeCond})
+    WHERE num_votes > 0
+      AND (${typeCond})
       AND primary_title ILIKE ${pattern}
     ORDER BY
-      CASE WHEN lower(primary_title) = lower(${q}) THEN 0
-           WHEN lower(primary_title) LIKE lower(${q}) || '%' THEN 1
-           ELSE 2 END,
+      num_votes DESC,
       start_year DESC NULLS LAST,
       primary_title ASC
     LIMIT ${limit}

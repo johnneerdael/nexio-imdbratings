@@ -136,7 +136,7 @@ func TestIndexBuildPlanCoversAllTables(t *testing.T) {
 	for _, item := range base {
 		baseNames = append(baseNames, item.name)
 	}
-	expectedBase := []string{"index ratings votes", "index episodes parent", "index basics title trgm", "index basics type year"}
+	expectedBase := []string{"index ratings votes", "index episodes parent", "index basics title trgm", "index basics title trgm popular", "index basics type year"}
 	if !slices.Equal(baseNames, expectedBase) {
 		t.Fatalf("expected base indexes %v, got %v", expectedBase, baseNames)
 	}

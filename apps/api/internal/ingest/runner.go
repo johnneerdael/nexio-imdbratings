@@ -613,7 +613,8 @@ func (r *Runner) createShadowTables(ctx context.Context, tx pgx.Tx, tables table
 					tconst TEXT PRIMARY KEY,
 					title_type TEXT NOT NULL,
 					primary_title TEXT NOT NULL,
-					start_year INTEGER
+					start_year INTEGER,
+					num_votes INTEGER NOT NULL DEFAULT 0
 				)
 			`, tables.TitleBasics),
 		},
@@ -644,6 +645,7 @@ func buildIndexPlans(tables tableSet) []indexStatement {
 		{name: "index ratings votes", statement: fmt.Sprintf(`CREATE INDEX %s ON %s(num_votes DESC)`, tables.TitleRatings+"_num_votes_idx", tables.TitleRatings)},
 		{name: "index episodes parent", statement: fmt.Sprintf(`CREATE INDEX %s ON %s(parent_tconst, season_number, episode_number)`, tables.TitleEpisodes+"_parent_idx", tables.TitleEpisodes)},
 		{name: "index basics title trgm", statement: fmt.Sprintf(`CREATE INDEX %s ON %s USING gin (primary_title gin_trgm_ops)`, tables.TitleBasics+"_primary_title_trgm_idx", tables.TitleBasics)},
+		{name: "index basics title trgm popular", statement: fmt.Sprintf(`CREATE INDEX %s ON %s USING gin (primary_title gin_trgm_ops) WHERE num_votes > 0`, tables.TitleBasics+"_primary_title_trgm_popular_idx", tables.TitleBasics)},
 		{name: "index basics type year", statement: fmt.Sprintf(`CREATE INDEX %s ON %s(title_type, start_year DESC)`, tables.TitleBasics+"_type_year_idx", tables.TitleBasics)},
 	}
 }
@@ -1055,6 +1057,14 @@ func (r *Runner) mergeBasicsDelta(ctx context.Context, tx pgx.Tx, stageTable str
 	if err != nil {
 		return 0, fmt.Errorf("merge basics delta: %w", err)
 	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE title_basics b
+		SET num_votes = r.num_votes
+		FROM title_ratings r
+		WHERE r.tconst = b.tconst
+	`); err != nil {
+		return 0, fmt.Errorf("denormalize basics votes delta: %w", err)
+	}
 	return tag.RowsAffected(), nil
 }
 
@@ -1108,6 +1118,12 @@ func (r *Runner) normalizeSnapshot(ctx context.Context, tx pgx.Tx, tables tableS
 			WHERE tconst IS NOT NULL
 			  AND titleType IN ('movie', 'tvSeries')
 		`, tables.TitleBasics, rawBasics)},
+		{name: "denormalize basics votes", statement: fmt.Sprintf(`
+			UPDATE %s b
+			SET num_votes = r.num_votes
+			FROM %s r
+			WHERE r.tconst = b.tconst
+		`, tables.TitleBasics, tables.TitleRatings)},
 	}
 
 	r.logf("imdb sync snapshot %d normalization started", snapshotID)
